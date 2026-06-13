@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "goal-agent",
   "main": "src/index.ts",
+  "account_id": "3bae3fb8abf763a2d88406ee1c2a554c",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
   "ai": {
