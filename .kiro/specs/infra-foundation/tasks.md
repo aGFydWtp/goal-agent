@@ -24,7 +24,7 @@
 
 ## 2. 基盤: 永続化スキーマとマイグレーション
 
-- [ ] 2.1 仕様書 §11 全テーブルのスキーマ定義を作成する
+- [x] 2.1 仕様書 §11 全テーブルのスキーマ定義を作成する
   - evaluation_cycles, goals, milestones, checkins, evidence, evidence_goal_links, weekly_reviews, drafts の DDL を §11 通りに定義する(型・NOT NULL・既定値: goals.status='gray', milestones.status='todo', evidence.usefulness='medium')
   - 各テーブルの行型を共有ドメイン型と整合させる
   - 完了条件: 8 テーブル全ての DDL が定義され、列挙カラムが共有 enum 型と一致する
