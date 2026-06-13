@@ -38,7 +38,7 @@
   - _Requirements: 2.1, 2.2, 2.3_
   - _Depends: 2.1_
 
-- [ ] 2.3 型付きリポジトリ(低レベル行アクセス)を実装する
+- [x] 2.3 型付きリポジトリ(低レベル行アクセス)を実装する
   - エンティティ単位の insert/getById/listBy/update/remove を、DO SQLite 上で共有ドメイン型にマッピングして提供する
   - ドメインのビジネスルール(妥当性検証・状態遷移)は含めない
   - 完了条件: 各エンティティの read/write が型付きで動作し、書き込んだ行が同じ型で取得できる
@@ -138,3 +138,4 @@
 - 2.2 [設計 revalidation]: design.md L234 の `SqlExecutor`(タグ付きテンプレート型)は生 DDL 文字列を実行できない(補間値がパラメータバインドされる)。実装は実 Cloudflare API `SqlStorage.exec(query, ...bindings)` をモデルした最小 IF `MigrationSql { exec(query, ...bindings): { toArray() } }` に変更。task 4.2 で `this.ctx.storage.sql` を直接渡せる。設計意図(version 台帳での冪等適用)は不変。下位スペックは `SqlExecutor` ではなくこの exec 形 IF を前提にすること。
 - 2.2 [vitest projects]: `pnpm test` は node プロジェクト(`environment: node`、`node:sqlite` 使用の純ロジック/永続化テスト)と workers プロジェクト(pool-workers、Cloudflare リモート接続)を両方実行する。**各プロジェクトは明示 `include` 許可リスト**なので、新規テストファイルは必ず vitest.config.ts の該当 `include` に追記しないと実行されない(サイレントに無視される)。永続化/純ロジック系→node、Workers ランタイム依存→workers。
 - 2.2: マイグレーション v1 = 台帳 DDL + `SCHEMA_STATEMENTS`(schema.ts から import、再定義しない)。台帳は `schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`。
+- 2.3: SQL 実行 IF は `migrator.ts` の `SqlLike { exec(query, ...bindings): { toArray() } }`(`MigrationSql` は別名)に統一。repository は `SqlLike` を受け取る factory。値は全て `?` バインド、テーブル名は `SCHEMA_TABLE_NAMES`・列名は `TABLE_COLUMNS` で許可リスト検証(未知キーは throw)。ビジネスルール(値域/状態遷移/所有者)は持たない=下位スペック所有。task 4.2 では `this.ctx.storage.sql` を `SqlLike` として repository/migrator に渡せる。

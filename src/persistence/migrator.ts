@@ -16,16 +16,24 @@
 import { MIGRATIONS, type Migration } from "./migrations";
 
 /**
- * migrator が依存する最小 SQL 実行インターフェイス。
+ * 永続化層が依存する最小 SQL 実行インターフェイス。
  * Cloudflare `SqlStorage.exec(query, ...bindings): SqlStorageCursor` の形に合わせ、
  * EvaluationCycleAgent が `this.ctx.storage.sql` をそのまま渡せるようにする。
+ *
+ * migrator と repository(task 2.3)はこの単一インターフェイスを共有する。
  */
-export interface MigrationSql {
+export interface SqlLike {
   exec(
     query: string,
     ...bindings: (string | number | null)[]
   ): { toArray(): Record<string, unknown>[] };
 }
+
+/**
+ * migrator が依存する SQL 実行インターフェイス。
+ * 互換性維持のため `SqlLike` の別名として保持する(既存の import を壊さない)。
+ */
+export type MigrationSql = SqlLike;
 
 /** schema_migrations 台帳の DDL(version 主キー + 適用時刻)。 */
 const LEDGER_DDL =

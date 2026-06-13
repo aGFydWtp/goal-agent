@@ -14,8 +14,8 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          // 永続化のユニットテスト群。node:sqlite を使う migrator はここで動かす。
-          include: ["test/migrator.test.ts"],
+          // 永続化のユニットテスト群。node:sqlite を使う migrator/repository はここで動かす。
+          include: ["test/migrator.test.ts", "test/repository.test.ts"],
         },
       },
       {
