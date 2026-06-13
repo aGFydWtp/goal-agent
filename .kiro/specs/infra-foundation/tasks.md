@@ -55,7 +55,7 @@
   - _Boundary: LlmClient + WorkersAi + Factory_
   - _Depends: 1.3_
 
-- [ ] 3.2 (P) Workers AI 実装とプロバイダ差し替えファクトリを実装する
+- [x] 3.2 (P) Workers AI 実装とプロバイダ差し替えファクトリを実装する
   - Workers AI バインディング経由でテキスト補完を行う実装を提供し、構造化 JSON 出力のパース失敗を invalid_output として返す
   - プロバイダ/モデル選択を 1 箇所に集約するファクトリを実装し、利用側コードを変更せずに差し替え可能にする
   - 完了条件: ファクトリが返すクライアントが Workers AI で補完を返し、モデル/プロバイダ変更がファクトリ 1 箇所の変更で完結する
@@ -138,4 +138,5 @@
 - 2.2 [設計 revalidation]: design.md L234 の `SqlExecutor`(タグ付きテンプレート型)は生 DDL 文字列を実行できない(補間値がパラメータバインドされる)。実装は実 Cloudflare API `SqlStorage.exec(query, ...bindings)` をモデルした最小 IF `MigrationSql { exec(query, ...bindings): { toArray() } }` に変更。task 4.2 で `this.ctx.storage.sql` を直接渡せる。設計意図(version 台帳での冪等適用)は不変。下位スペックは `SqlExecutor` ではなくこの exec 形 IF を前提にすること。
 - 2.2 [vitest projects]: `pnpm test` は node プロジェクト(`environment: node`、`node:sqlite` 使用の純ロジック/永続化テスト)と workers プロジェクト(pool-workers、Cloudflare リモート接続)を両方実行する。**各プロジェクトは明示 `include` 許可リスト**なので、新規テストファイルは必ず vitest.config.ts の該当 `include` に追記しないと実行されない(サイレントに無視される)。永続化/純ロジック系→node、Workers ランタイム依存→workers。
 - 2.2: マイグレーション v1 = 台帳 DDL + `SCHEMA_STATEMENTS`(schema.ts から import、再定義しない)。台帳は `schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`。
+- 3.2: Workers AI は `env.AI.run(model, inputs)` 入力 `{ prompt | messages, max_tokens, temperature }`(AiTextGenerationInput)・出力 `{ response?: string }`。モデル id は **factory.ts のみ**に集約(`@cf/meta/llama-3.1-8b-instruct-fp8`)、`WorkersAiLlmClient` はモデルをコンストラクタ注入。`completeJson` は JSON.parse 失敗・zod safeParse 失敗の両方を `invalid_output`(cause=parse error / zod issues)で返す。基盤呼び出し throw は provider_error、AbortError/TimeoutError は timeout。利用側は `LlmClient` 契約のみ依存。
 - 2.3: SQL 実行 IF は `migrator.ts` の `SqlLike { exec(query, ...bindings): { toArray() } }`(`MigrationSql` は別名)に統一。repository は `SqlLike` を受け取る factory。値は全て `?` バインド、テーブル名は `SCHEMA_TABLE_NAMES`・列名は `TABLE_COLUMNS` で許可リスト検証(未知キーは throw)。ビジネスルール(値域/状態遷移/所有者)は持たない=下位スペック所有。task 4.2 では `this.ctx.storage.sql` を `SqlLike` として repository/migrator に渡せる。

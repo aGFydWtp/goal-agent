@@ -15,7 +15,12 @@ export default defineConfig({
           name: "node",
           environment: "node",
           // 永続化のユニットテスト群。node:sqlite を使う migrator/repository はここで動かす。
-          include: ["test/migrator.test.ts", "test/repository.test.ts", "test/llm-client.test.ts"],
+          include: [
+            "test/migrator.test.ts",
+            "test/repository.test.ts",
+            "test/llm-client.test.ts",
+            "test/llm-workers-ai.test.ts",
+          ],
         },
       },
       {
