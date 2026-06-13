@@ -14,7 +14,7 @@
   - 完了条件: ドキュメント記載の手順どおりに型チェックとローカル起動が再現できる
   - _Requirements: 1.5_
 
-- [ ] 1.3 共有ドメイン型と列挙値型を定義する
+- [x] 1.3 共有ドメイン型と列挙値型を定義する
   - 仕様書 §11 の各エンティティ(Cycle/Goal/Milestone/Checkin/Evidence/EvidenceGoalLink/WeeklyReview/Draft)に対応する型を定義する
   - 列挙値(goal status, milestone status, evidence source_type, evidence usefulness, draft type)を共有 enum 型として定義する
   - §13 で共通利用される基本型(関連度スコア、ステータス値、有用度)を定義する
@@ -130,3 +130,8 @@
   - 完了条件: 型チェックとスモーク疎通が成功し、基盤境界外の責務が混入していないことが確認される
   - _Requirements: 1.1, 1.2, 1.3, 6.1, 6.2, 6.3, 6.4_
   - _Depends: 5.1_
+
+## Implementation Notes
+- 1.1/1.3: Workers AI バインディングはローカルシミュレータが無いため、`@cloudflare/vitest-pool-workers` は AI バインディング存在時に必ず remote proxy セッションを起動する(`ai.remote` フラグの有無に関わらず)。`pnpm test` を通すには Cloudflare 認証(`wrangler login` 済み)に加え `wrangler.jsonc` に `account_id` を明示する必要がある(未指定だと account ID 自動取得に失敗してテストプールが起動しない)。設定済み: account_id を wrangler.jsonc に記載。テストは remote 接続(~3s)で実行される。
+- 1.3: EntityName は §11 テーブル名("evaluation_cycles","goals",...)を識別子に採用。nullable 列は一貫して `string | null`(optional `?` ではない)。enum は `as const` タプル + `(typeof X)[number]` で値配列と union 型を単一ソース化。downstream は `src/types` 単一エントリから import する。
+- テスト配置: `test/` 配下はスキャフォールドの biome `includes`(`src/**`)・tsconfig `include` の対象外。テストは vitest/pool-workers の型環境でのみ型付けされる。
