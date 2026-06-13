@@ -20,6 +20,7 @@ export default defineConfig({
             "test/repository.test.ts",
             "test/llm-client.test.ts",
             "test/llm-workers-ai.test.ts",
+            "test/agent-ids.test.ts",
           ],
         },
       },

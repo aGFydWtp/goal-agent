@@ -65,7 +65,7 @@
 
 ## 4. 基盤: Agent トポロジと ID ルーティング
 
-- [ ] 4.1 (P) Agent ID 規約の組立/分解ユーティリティを実装する
+- [x] 4.1 (P) Agent ID 規約の組立/分解ユーティリティを実装する
   - 仕様書 §6 の ID 規約(cycle: `evaluation:{userId}:{cycleId}`、goal: `evaluation:{userId}:{cycleId}:goal:{goalId}`)で名前を組み立て、文字列を種別付きで分解する
   - 完了条件: 組立/分解が往復一致し、不正な ID 文字列は分解で null を返す
   - _Requirements: 3.2_
