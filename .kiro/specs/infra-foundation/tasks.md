@@ -2,7 +2,7 @@
 
 ## 1. 基盤: プロジェクト雛形と共有型
 
-- [ ] 1.1 Cloudflare Worker + Agents SDK プロジェクト雛形を作成する
+- [x] 1.1 Cloudflare Worker + Agents SDK プロジェクト雛形を作成する
   - `agents` パッケージ・`wrangler`・TypeScript(strict)を依存に追加し、`dev`/`typecheck`/`deploy` のスクリプトを用意する
   - `wrangler` 設定に Worker 名・エントリーポイント・互換性日付・Workers AI バインディング・EvaluationCycleAgent/GoalAgent の Durable Object バインディングと `new_sqlite_classes` マイグレーションを宣言する
   - 型付き Env(Workers AI バインディングと両 DO バインディング)を定義し、最小の Worker エントリーポイントがリクエストに応答する

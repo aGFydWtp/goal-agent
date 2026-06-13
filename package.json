@@ -1,0 +1,25 @@
+{
+  "name": "goal-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "agents": "^0.16.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@cloudflare/vitest-pool-workers": "^0.16.15",
+    "@cloudflare/workers-types": "^4.20260613.1",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.8",
+    "wrangler": "^4.100.0"
+  },
+  "packageManager": "pnpm@10.26.2"
+}
