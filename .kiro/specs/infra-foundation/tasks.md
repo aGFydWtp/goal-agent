@@ -31,7 +31,7 @@
   - _Requirements: 2.1, 2.4, 2.5_
   - _Depends: 1.3_
 
-- [ ] 2.2 冪等マイグレーションランナーを実装する
+- [x] 2.2 冪等マイグレーションランナーを実装する
   - 適用済みバージョンを記録する台帳テーブルと、順序付きマイグレーション配列を未適用分だけ適用するランナーを実装する
   - 各 DDL は再実行安全(IF NOT EXISTS)とし、適用後にバージョンを台帳へ記録する
   - 完了条件: 空の DB に対して全 §11 テーブルと台帳が生成され、適用済み DB への再実行ではエラーなく既存データが保持される
@@ -135,3 +135,6 @@
 - 1.1/1.3: Workers AI バインディングはローカルシミュレータが無いため、`@cloudflare/vitest-pool-workers` は AI バインディング存在時に必ず remote proxy セッションを起動する(`ai.remote` フラグの有無に関わらず)。`pnpm test` を通すには Cloudflare 認証(`wrangler login` 済み)に加え `wrangler.jsonc` に `account_id` を明示する必要がある(未指定だと account ID 自動取得に失敗してテストプールが起動しない)。設定済み: account_id を wrangler.jsonc に記載。テストは remote 接続(~3s)で実行される。
 - 1.3: EntityName は §11 テーブル名("evaluation_cycles","goals",...)を識別子に採用。nullable 列は一貫して `string | null`(optional `?` ではない)。enum は `as const` タプル + `(typeof X)[number]` で値配列と union 型を単一ソース化。downstream は `src/types` 単一エントリから import する。
 - テスト配置: `test/` 配下はスキャフォールドの biome `includes`(`src/**`)・tsconfig `include` の対象外。テストは vitest/pool-workers の型環境でのみ型付けされる。
+- 2.2 [設計 revalidation]: design.md L234 の `SqlExecutor`(タグ付きテンプレート型)は生 DDL 文字列を実行できない(補間値がパラメータバインドされる)。実装は実 Cloudflare API `SqlStorage.exec(query, ...bindings)` をモデルした最小 IF `MigrationSql { exec(query, ...bindings): { toArray() } }` に変更。task 4.2 で `this.ctx.storage.sql` を直接渡せる。設計意図(version 台帳での冪等適用)は不変。下位スペックは `SqlExecutor` ではなくこの exec 形 IF を前提にすること。
+- 2.2 [vitest projects]: `pnpm test` は node プロジェクト(`environment: node`、`node:sqlite` 使用の純ロジック/永続化テスト)と workers プロジェクト(pool-workers、Cloudflare リモート接続)を両方実行する。**各プロジェクトは明示 `include` 許可リスト**なので、新規テストファイルは必ず vitest.config.ts の該当 `include` に追記しないと実行されない(サイレントに無視される)。永続化/純ロジック系→node、Workers ランタイム依存→workers。
+- 2.2: マイグレーション v1 = 台帳 DDL + `SCHEMA_STATEMENTS`(schema.ts から import、再定義しない)。台帳は `schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`。
