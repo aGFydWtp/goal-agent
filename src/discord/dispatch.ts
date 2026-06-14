@@ -5,7 +5,12 @@ import type { DiscordEnv } from "./env";
 import { createFollowup } from "./followup";
 import { lookupHandler } from "./registry";
 import { deferred, modal, type ResponseOptions, reply } from "./response";
-import type { InteractionContext, InteractionKind } from "./types";
+import type {
+  InteractionContext,
+  InteractionKind,
+  MessageActionRow,
+  MessageOptions,
+} from "./types";
 
 /**
  * interaction ディスパッチャ (Req 1.6, 3.1-3.5, 4.1-4.3, 4.7 / design.md §dispatch
@@ -118,6 +123,26 @@ function ephemeralOpts(ephemeral?: boolean): ResponseOptions {
   return ephemeral === undefined ? {} : { ephemeral };
 }
 
+/**
+ * reply 結果(ephemeral + components)を {@link MessageOptions} へ正規化する
+ * (task 6.4, Req 4.8)。
+ *
+ * `exactOptionalPropertyTypes` 下では `undefined` の明示的な代入を避けるため、値が
+ * 定義されている場合のみキーを含める。`components` は message 用 action row / button
+ * (Req 4.8)で、即時応答(type4)の `data.components` へ反映される。button 固有の
+ * 業務判断はゲートウェイに置かず、下位機能ハンドラが供給した値をそのまま渡す (Req 4.11)。
+ */
+function replyOpts(ephemeral?: boolean, components?: MessageActionRow[]): MessageOptions {
+  const opts: MessageOptions = {};
+  if (ephemeral !== undefined) {
+    opts.ephemeral = ephemeral;
+  }
+  if (components !== undefined) {
+    opts.components = components;
+  }
+  return opts;
+}
+
 /** ephemeral なエラー応答を JSON Response として返す(個人データ露出なし / Req 3.4)。 */
 function errorResponse(message: string): Response {
   return Response.json(reply(message, { ephemeral: true }));
@@ -158,8 +183,8 @@ export async function dispatchInteraction(
 
   switch (result.mode) {
     case "reply":
-      // 即時応答(type4)。
-      return Response.json(reply(result.content, ephemeralOpts(result.ephemeral)));
+      // 即時応答(type4)。components 付きなら data.components に message 用 button を載せる(Req 4.8)。
+      return Response.json(reply(result.content, replyOpts(result.ephemeral, result.components)));
     case "deferred": {
       // 初期 deferred 応答(type5)を即返し、重い処理を waitUntil で継続する(Req 4.1, 4.3)。
       const { run } = result;

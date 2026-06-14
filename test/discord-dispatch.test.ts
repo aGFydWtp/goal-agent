@@ -8,6 +8,7 @@ import type {
   HandlerResult,
   InteractionContext,
   InteractionHandler,
+  MessageActionRow,
 } from "../src/discord/types";
 
 // interaction ディスパッチャ(task 3.2)のユニットテスト
@@ -294,6 +295,74 @@ describe("dispatchInteraction: modal(type9)→(Req 4.7)", () => {
     expect(data.custom_id).toBe("checkin_modal");
     expect(data.title).toBe("チェックイン");
     expect(data.components).toEqual(result.components);
+  });
+});
+
+describe("dispatchInteraction: reply に button を載せる配線(task 6.4, Req 4.8, 4.10)", () => {
+  const row: MessageActionRow = {
+    type: 1,
+    components: [{ type: 2, custom_id: "btn:confirm", label: "確定", style: 1 }],
+  };
+
+  it("HandlerResult.components 付き reply を type4 応答の data.components へ反映する", async () => {
+    const { handler } = handlerReturning({
+      mode: "reply",
+      content: "実行しますか?",
+      components: [row],
+    });
+    registerHandler("command", "ask", handler);
+    const { ctx } = fakeCtx();
+
+    const res = await dispatchInteraction(commandInteraction("ask"), env, ctx);
+
+    const body = await bodyOf(res);
+    expect(body.type).toBe(4);
+    const data = body.data as Record<string, unknown>;
+    expect(data.content).toBe("実行しますか?");
+    expect(data.components).toEqual([row]);
+  });
+
+  it("ephemeral + components 付き reply は flags(64)と components の双方を反映する", async () => {
+    const { handler } = handlerReturning({
+      mode: "reply",
+      content: "本人のみ",
+      ephemeral: true,
+      components: [row],
+    });
+    registerHandler("command", "asksecret", handler);
+    const { ctx } = fakeCtx();
+
+    const res = await dispatchInteraction(commandInteraction("asksecret"), env, ctx);
+
+    const data = (await bodyOf(res)).data as Record<string, unknown>;
+    expect(data.flags).toBe(64);
+    expect(data.components).toEqual([row]);
+  });
+
+  it("components 無し reply は data.components を出力しない(既存挙動維持)", async () => {
+    const { handler } = handlerReturning({ mode: "reply", content: "ただの応答" });
+    registerHandler("command", "plain", handler);
+    const { ctx } = fakeCtx();
+
+    const res = await dispatchInteraction(commandInteraction("plain"), env, ctx);
+    const data = (await bodyOf(res)).data as Record<string, unknown>;
+    expect(data.components).toBeUndefined();
+  });
+
+  it("button 押下(type3, 同一 custom_id)が既存 custom_id 規約で component handler へ戻る(Req 4.10)", async () => {
+    // reply に載せた button の custom_id と同じ値で type3 interaction を送ると、
+    // component handler へ振り分けられる(button 固有の業務判断はゲートウェイに無い)。
+    const { handler, seen } = handlerReturning({ mode: "reply", content: "押された" });
+    registerHandler("component", "btn:confirm", handler);
+    const { ctx } = fakeCtx();
+
+    const res = await dispatchInteraction(componentInteraction("btn:confirm"), env, ctx);
+
+    const body = await bodyOf(res);
+    expect(body.type).toBe(4);
+    const c = seen.ctx as InteractionContext;
+    expect(c.kind).toBe("component");
+    expect(c.name).toBe("btn:confirm");
   });
 });
 

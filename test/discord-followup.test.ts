@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "v
 
 import { createFollowup } from "../src/discord/followup";
 import type { DiscordEnv } from "../src/discord/env";
-import type { Followup, HandlerResult, SendResult } from "../src/discord/types";
+import type {
+  Followup,
+  HandlerResult,
+  MessageActionRow,
+  SendResult,
+} from "../src/discord/types";
 
 // follow-up 送信ユーティリティ(task 2.4)のユニットテスト (Req 4.2, 4.4)。
 //
@@ -146,6 +151,57 @@ describe("send: 追加 follow-up 送信(POST)で失敗通知等を送る", () =>
     mockFetch(403);
     const result = await createFollowup(env, TOKEN).send("x");
     expect(result).toEqual({ ok: false, reason: "forbidden", status: 403 });
+  });
+});
+
+describe("follow-up に message component button を載せる(task 6.3, Req 4.9)", () => {
+  const row: MessageActionRow = {
+    type: 1,
+    components: [{ type: 2, custom_id: "btn:retry", label: "再試行", style: 1 }],
+  };
+
+  it("editOriginal が components を webhook body の components に含める", async () => {
+    const fn = mockFetch(200);
+
+    await createFollowup(env, TOKEN).editOriginal("本応答です", { components: [row] });
+
+    const { url, init } = callArgs(fn);
+    expect(url).toBe(`${BASE}/webhooks/app-123/${TOKEN}/messages/@original`);
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(init.body as string)).toEqual({ content: "本応答です", components: [row] });
+  });
+
+  it("send が components を webhook body の components に含める", async () => {
+    const fn = mockFetch(200);
+
+    await createFollowup(env, TOKEN).send("追加メッセージ", { components: [row] });
+
+    const { url, init } = callArgs(fn);
+    expect(url).toBe(`${BASE}/webhooks/app-123/${TOKEN}`);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ content: "追加メッセージ", components: [row] });
+  });
+
+  it("ephemeral と components を併用でき、flags(64)と components の双方を body に含める", async () => {
+    const fn = mockFetch(200);
+
+    await createFollowup(env, TOKEN).editOriginal("本人のみ", { ephemeral: true, components: [row] });
+
+    const { init } = callArgs(fn);
+    expect(JSON.parse(init.body as string)).toEqual({
+      content: "本人のみ",
+      flags: 64,
+      components: [row],
+    });
+  });
+
+  it("components 未指定時は body に components を含めない(純加算 / 既存挙動維持)", async () => {
+    const fn = mockFetch(200);
+
+    await createFollowup(env, TOKEN).send("通常メッセージ");
+
+    const { init } = callArgs(fn);
+    expect(JSON.parse(init.body as string)).toEqual({ content: "通常メッセージ" });
   });
 });
 

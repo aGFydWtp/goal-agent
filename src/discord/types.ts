@@ -1,5 +1,7 @@
 import type {
   APIActionRowComponent,
+  APIButtonComponentWithCustomId,
+  APIComponentInMessageActionRow,
   APIComponentInModalActionRow,
   APIInteraction,
 } from "discord-api-types/v10";
@@ -69,10 +71,16 @@ export interface InteractionContext {
  * 送信は例外を投げず、結果を {@link SendResult} として判別可能に返す。
  */
 export interface Followup {
-  /** @original webhook を編集して本応答を送る (Req 4.2)。 */
-  editOriginal(content: string, opts?: { ephemeral?: boolean }): Promise<SendResult>;
-  /** 追加の follow-up メッセージを送る (Req 4.2)。 */
-  send(content: string, opts?: { ephemeral?: boolean }): Promise<SendResult>;
+  /**
+   * @original webhook を編集して本応答を送る (Req 4.2)。`opts.components` 指定時は
+   * message 用 action row / button を webhook body に含める (Req 4.9)。
+   */
+  editOriginal(content: string, opts?: MessageOptions): Promise<SendResult>;
+  /**
+   * 追加の follow-up メッセージを送る (Req 4.2)。`opts.components` 指定時は message 用
+   * action row / button を webhook body に含める (Req 4.9)。
+   */
+  send(content: string, opts?: MessageOptions): Promise<SendResult>;
 }
 
 /**
@@ -86,15 +94,78 @@ export type SendResult =
   | { ok: false; reason: "forbidden" | "not_found" | "rest_error"; status?: number };
 
 /**
- * ハンドラが宣言できる応答結果 (Req 4.1, 4.7)。
+ * message component button のスタイル (Req 4.8)。
  *
- * - `"reply"`: 即時応答(Discord response type 4)。
- * - `"deferred"`: deferred 応答。`run` が {@link Followup} 経由で本応答を送る。
+ * 1=Primary / 2=Secondary / 3=Success / 4=Danger。押下後に interaction を返す
+ * 非 Link / 非 Premium button のみを扱うため、style は 1-4 に限定する。URL button
+ * (style 5)/ premium button は custom_id ディスパッチに戻らないため本契約に含めない
+ * (Req 4.10, 4.11 / design L280)。
+ */
+export type MessageButtonStyle = 1 | 2 | 3 | 4;
+
+/**
+ * message component button (Req 4.8)。
+ *
+ * Discord message component の Button(component type 2)に準拠する。`custom_id` と
+ * `label` の中身、押下後の業務処理は下位機能スペックが所有し、ゲートウェイは button 固有の
+ * 業務判断を持たない (Req 4.11)。`custom_id` は後続の message component interaction
+ * (type3)へそのまま戻る (Req 4.10)。
+ */
+export interface MessageButton {
+  /** Button component type。 */
+  type: 2;
+  /** 押下時の interaction で返る custom_id(1-100 chars 想定 / 下位機能が所有)。 */
+  custom_id: string;
+  /** 表示ラベル(max 80 chars 想定 / 下位機能が所有)。 */
+  label: string;
+  /** 1=Primary / 2=Secondary / 3=Success / 4=Danger。 */
+  style: MessageButtonStyle;
+  /** true で無効化(押下不可)。 */
+  disabled?: boolean;
+}
+
+/**
+ * message 用 action row (Req 4.8)。
+ *
+ * Discord message component payload に準拠する(action row が button を内包する)。
+ * modal 用 {@link ModalActionRow} とは内包要素(button=type2 / text input=type4)で
+ * 型レベルに区別される。Discord 上限は 1 row あたり最大 5 button。
+ */
+export interface MessageActionRow {
+  /** ActionRow component type。 */
+  type: 1;
+  /** action row が内包する button 群。 */
+  components: MessageButton[];
+}
+
+/**
+ * 即時応答 / follow-up 共通の message オプション (Req 4.6, 4.8, 4.9)。
+ *
+ * {@link reply}(task 6.2)と {@link Followup}(task 6.3)が同じ契約で ephemeral と
+ * message component button を表現する(design L279)。本タスク(6.1)では型のみを公開し、
+ * `reply` / `Followup` 実装側の `components` 取り込みは 6.2 / 6.3 で行う。
+ */
+export interface MessageOptions {
+  /** true のとき応答を本人のみ可視(ephemeral / flag 64)にする (Req 4.6, 6.2)。 */
+  ephemeral?: boolean;
+  /** 応答に載せる message 用 action row / button (Req 4.8, 4.9)。 */
+  components?: MessageActionRow[];
+}
+
+/**
+ * ハンドラが宣言できる応答結果 (Req 4.1, 4.7, 4.8)。
+ *
+ * - `"reply"`: 即時応答(Discord response type 4)。任意で {@link MessageActionRow} 群を
+ *   `components` に載せられる (Req 4.8)。
+ * - `"deferred"`: deferred 応答。`run` が {@link Followup} 経由で本応答を送る。button は
+ *   deferred 初期応答ではなく follow-up(`editOriginal` / `send`)の `components` で送る
+ *   (Req 4.9 / design L358)。
  * - `"modal"`: modal を開く(response type 9)。`customId` / `title` / text input
- *   群を {@link ModalActionRow} で宣言する (Req 4.7)。
+ *   群を {@link ModalActionRow} で宣言する (Req 4.7)。modal 用 action row は message 用
+ *   {@link MessageActionRow} と型レベルで区別される。
  */
 export type HandlerResult =
-  | { mode: "reply"; ephemeral?: boolean; content: string }
+  | { mode: "reply"; ephemeral?: boolean; content: string; components?: MessageActionRow[] }
   | { mode: "deferred"; ephemeral?: boolean; run: (followup: Followup) => Promise<void> }
   | { mode: "modal"; customId: string; title: string; components: ModalActionRow[] };
 
@@ -155,3 +226,21 @@ type _AssertModalActionRowCompatible =
 // 互換でなければ never となり、下記 const 初期化が型エラーになる。
 const _assertModalActionRowCompatible: _AssertModalActionRowCompatible = true;
 void _assertModalActionRowCompatible;
+
+/**
+ * {@link MessageButton} が Discord の custom_id 付き button payload 型と、
+ * {@link MessageActionRow} が message 用 action row 型と構造的に互換であることを
+ * コンパイル時に検証する(ランタイムコストゼロ)。`label` を必須にする等、本ローカル型は
+ * より厳格な制約を課すが、payload としては互換であることを保証する。互換でなければ never
+ * となり下記 const 初期化が型エラーになる。
+ */
+type _AssertMessageButtonCompatible = MessageButton extends APIButtonComponentWithCustomId
+  ? true
+  : never;
+const _assertMessageButtonCompatible: _AssertMessageButtonCompatible = true;
+void _assertMessageButtonCompatible;
+
+type _AssertMessageActionRowCompatible =
+  MessageActionRow extends APIActionRowComponent<APIComponentInMessageActionRow> ? true : never;
+const _assertMessageActionRowCompatible: _AssertMessageActionRowCompatible = true;
+void _assertMessageActionRowCompatible;

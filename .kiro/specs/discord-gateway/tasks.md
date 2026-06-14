@@ -120,8 +120,8 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.5, 6.3, 6.4_
   - _Depends: 2.5_
 
-- [ ] 6. message component button 契約
-- [ ] 6.1 button 応答契約の型を追加
+- [x] 6. message component button 契約
+- [x] 6.1 button 応答契約の型を追加
   - MessageButton(type2: custom_id/label/style 1-4/disabled)・MessageActionRow(type1: MessageButton[])・MessageOptions(ephemeral?/components?) を types に追加する
   - HandlerResult の reply 変種に任意の components(MessageActionRow[])を追加する(既存フィールドへの純加算)
   - message 用 MessageActionRow と modal 用 ModalActionRow を型レベルで区別する。本タスクでは Followup インターフェイスは変更しない(6.3 で実装と同時に拡張する)
@@ -130,7 +130,7 @@
   - _Boundary: Interaction 型・ハンドラ規約_
   - _Depends: 1.2_
 
-- [ ] 6.2 (P) 即時応答(reply)に button を載せる
+- [x] 6.2 (P) 即時応答(reply)に button を載せる
   - response の reply オプションを MessageOptions の components 対応にし、components 指定時に応答 data.components へ message 用 action row/button を出力する
   - button style は 1-4 に限定し modal 用 component と混同しない
   - 完了状態: reply に MessageActionRow を渡すと type4 応答の data.components に action row/button が含まれ、ephemeral と併用できることをユニットテストで確認できる
@@ -138,14 +138,14 @@
   - _Boundary: Response Utilities_
   - _Depends: 6.1_
 
-- [ ] 6.3 (P) follow-up に button を載せ Followup 契約を拡張
+- [x] 6.3 (P) follow-up に button を載せ Followup 契約を拡張
   - Followup.editOriginal/send の opts を MessageOptions(ephemeral + components)へ拡張し(契約の型と followup/rest の実装を同一タスクで一括変更)、MessageOptions.components を webhook body の components に含める
   - 完了状態: editOriginal/send が components を受け取り webhook body に action row/button が含まれること、および変更後もプロジェクト全体の型チェックが緑のまま通ることをユニットテストで確認できる
   - _Requirements: 4.9_
   - _Boundary: Followup Utility, Discord REST Client, Followup 契約型_
   - _Depends: 6.1_
 
-- [ ] 6.4 button 応答と component ディスパッチを配線
+- [x] 6.4 button 応答と component ディスパッチを配線
   - dispatch の reply 経路が HandlerResult.components を response の reply に MessageOptions として渡す配線にする
   - button 押下による message component interaction(type3)が既存の custom_id ディスパッチ規約で対応ハンドラへ戻ることを保証し、button 固有の業務判断はゲートウェイに置かない
   - 完了状態: components 付き reply が type4 応答に反映され、同一 custom_id の type3 interaction が component handler へ振り分けられる
@@ -153,7 +153,7 @@
   - _Boundary: Interaction Dispatcher_
   - _Depends: 6.1, 6.2, 3.2_
 
-- [ ] 6.5 button 契約の統合テスト
+- [x] 6.5 button 契約の統合テスト
   - mode:"reply" + components で type4 応答に action row/button が含まれること、deferred の followup.editOriginal/send で webhook body に button が含まれること、button custom_id の type3 interaction が component handler へ振り分けられることを検証する
   - 完了状態: button 即時応答・button follow-up・button→component ディスパッチの統合テストが通る
   - _Requirements: 4.8, 4.9, 4.10, 4.11_
@@ -161,6 +161,7 @@
 
 ## Implementation Notes
 - discord-api-types@0.38.48 では modal action row 子要素の v10 エクスポートは `APIComponentInModalActionRow`(design L287 の `APIModalActionRowComponent` は v8 のみで v10 に存在しない)。modal payload 型を扱う後続タスク(2.2 response, 3.2 dispatch)は v10 名を使うこと。`discord-interactions` は `dependencies`、`discord-api-types` は型のみで `devDependencies`。
-- 新規テストは `vitest.config.ts` の `node`/`workers` プロジェクト `include` 配列へ登録必須。`node` プロジェクトのテストは `tsconfig.test.json` の `include` にも追加が必要(型チェック対象に含めるため)。Workers ランタイム/ExecutionContext/DO を要するテストは `workers` プロジェクト。
+- 新規テストは `vitest.config.ts` の `node`/`workers` プロジェクト `include` 配列へ登録必須。`node` プロジェクトのテストは `tsconfig.test.json` の `include` にも追加が必要(型チェック対象に含めるため)。Workers ランタイム/ExecutionContext/DO を要するテストは `workers` プロジェクト。【更新】現在 `node` プロジェクトは `test/**/*.test.ts` の glob 自動取り込みのため、純ロジックの node テストは `vitest.config.ts` への登録不要(`tsconfig.test.json` への追加のみ必要)。workers ランタイムを要するテストだけ vitest.config の workers include と node exclude へ登録する。
+- task 6.1-6.5(button 契約)は型と各実装への純加算で完了。message 用 `MessageActionRow`(button=type2)と modal 用 `ModalActionRow`(text input=type4)は内包要素で型レベル区別され、`MessageButton`/`MessageActionRow` の Discord payload 互換性は types.ts の compile-time assertion(`APIButtonComponentWithCustomId`/`APIComponentInMessageActionRow`)で担保。button は plain data のため P0 の workerd enum 値問題には抵触しない(新規 discord-api-types の実行時 enum 値追加なし)。deferred 初期応答(type5)には button を載せず follow-up(`editOriginal`/`send` の `MessageOptions.components`)で送る(design L358/L373)。`reply` は `MessageOptions`、`deferred` は ephemeral 限定 `ResponseOptions` のまま分離。
 - infra-foundation の `test/boundary.test.ts` は当初 `src/` 全体から Discord パターン(verifyKey/Ed25519/InteractionType 等)と discord-interactions/discord-api-types 依存を禁止していたが、discord-gateway design と衝突するため基盤自レイヤ限定に再スコープ済み(commit 1313b7e、ユーザー承認)。`src/discord/` と統合点 `src/index.ts` は対象外。よって task 3.2(InteractionType 利用)・4.1(index.ts への interactions 統合)は boundary 検査に抵触しない。
 - **【P0・必読】discord-api-types/v10 の enum「値」(InteractionType.*/InteractionResponseType.*/MessageFlags.*)は本番 workerd ランタイム(@cloudflare/vitest-pool-workers)上で `undefined` に解決され実行時 TypeError を起こす(CJS __exportStar 再エクスポートの interop 問題)。node プロジェクトのテストでは CJS interop で動くため見逃される。応答 type 値・interaction type 判定・ephemeral flag 等の**実行時 enum 値は必ず `discord-interactions`(workerd で正しく解決。verify.ts/index.ts/response.ts/dispatch.ts が使用)から取る**こと(InteractionResponseType.PONG/CHANNEL_MESSAGE_WITH_SOURCE/DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE/MODAL、InteractionType.PING/APPLICATION_COMMAND/MESSAGE_COMPONENT/MODAL_SUBMIT、InteractionResponseFlags.EPHEMERAL=64)。`discord-api-types` は**型のみ**使用(design §Technology Stack と一致)。task 4.1 で response.ts/dispatch.ts を是正済み。**Discord ランタイム挙動を伴うテストは workers プロジェクトで実行すること**(node のみだと workerd 不具合を見逃す)。
