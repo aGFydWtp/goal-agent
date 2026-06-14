@@ -34,6 +34,8 @@ export default defineConfig({
             "test/discord-followup.test.ts",
             // プロアクティブ送信ヘルパー(task 2.5)。fetch モックで純粋に検証する。
             "test/discord-proactive.test.ts",
+            // ハンドラレジストリ(task 3.1)。(kind,name)→handler のマップ規約の純粋ロジック。
+            "test/discord-registry.test.ts",
           ],
         },
       },
