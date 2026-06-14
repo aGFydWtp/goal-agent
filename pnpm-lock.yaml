@@ -11,6 +11,9 @@ importers:
       agents:
         specifier: ^0.16.0
         version: 0.16.0(@babel/core@7.29.7)(@babel/runtime@7.29.7)(@cloudflare/workers-types@4.20260613.1)(ai@6.0.204(zod@4.4.3))(react@19.2.7)(rolldown@1.1.1)(vite@8.0.16(esbuild@0.28.1)(yaml@2.9.0))(zod@4.4.3)
+      discord-interactions:
+        specifier: ^4.4.0
+        version: 4.4.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -24,6 +27,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20260613.1
         version: 4.20260613.1
+      discord-api-types:
+        specifier: ^0.38.48
+        version: 0.38.48
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
@@ -1327,6 +1333,13 @@ packages:
   diff@8.0.4:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
     engines: {node: '>=0.3.1'}
+
+  discord-api-types@0.38.48:
+    resolution: {integrity: sha512-WFUE/2o0lBlLeCQonQ+Pu2RqHAqbytBJ2RlXR91gzk05InSS6k9ShzzLYoymrA4c2oRgRKGE7/VqQJNNdGWSxQ==}
+
+  discord-interactions@4.4.0:
+    resolution: {integrity: sha512-jjJx8iwAeJcj8oEauV43fue9lNqkf38fy60aSs2+G8D1nJmDxUIrk08o3h0F3wgwuBWWJUZO+X/VgfXsxpCiJA==}
+    engines: {node: '>=18.4.0'}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -3296,6 +3309,10 @@ snapshots:
   detect-libc@2.1.2: {}
 
   diff@8.0.4: {}
+
+  discord-api-types@0.38.48: {}
+
+  discord-interactions@4.4.0: {}
 
   dunder-proto@1.0.1:
     dependencies:

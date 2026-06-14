@@ -41,5 +41,33 @@ declare module "node:path" {
   function join(...segments: string[]): string;
 }
 
+declare module "node:buffer" {
+  // discord-verify.test.ts で使う Buffer の最小サーフェス
+  //(base64url ↔ hex 変換、UTF-8 エンコード)。
+  interface Buffer {
+    toString(encoding: "hex" | "utf8"): string;
+  }
+  const Buffer: {
+    from(input: string, encoding?: "base64url" | "hex" | "utf8"): Buffer;
+  };
+}
+
+declare module "node:crypto" {
+  // discord-verify.test.ts で使う Ed25519 鍵生成/署名の最小サーフェス。
+  import type { Buffer } from "node:buffer";
+  interface KeyObject {
+    export(options: { format: "jwk" }): { x: string };
+  }
+  function generateKeyPairSync(type: "ed25519"): {
+    publicKey: KeyObject;
+    privateKey: KeyObject;
+  };
+  function sign(
+    algorithm: null,
+    data: Buffer,
+    key: KeyObject,
+  ): Buffer;
+}
+
 // CommonJS 由来のモジュール相対ディレクトリ(boundary.test.ts で使用)。
 declare const __dirname: string;

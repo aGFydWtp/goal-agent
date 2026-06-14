@@ -24,6 +24,17 @@
     "test/llm-workers-ai.test.ts",
     "test/agent-ids.test.ts",
     "test/boundary.test.ts",
+    "test/discord-verify.test.ts",
+    "test/discord-response.test.ts",
+    "test/discord-rest.test.ts",
+    "test/discord-followup.test.ts",
+    "test/discord-proactive.test.ts",
+    "test/discord-proactive-privacy.test.ts",
+    "test/discord-registry.test.ts",
+    "test/discord-dispatch.test.ts",
+    "test/discord-command-definitions.test.ts",
+    "test/discord-command-register.test.ts",
+    "test/discord-register-smoke.test.ts",
     "test/helpers/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", ".wrangler"]
