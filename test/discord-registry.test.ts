@@ -101,6 +101,64 @@ describe("createRegistry: 独立インスタンス", () => {
   });
 });
 
+describe("createRegistry: 接頭辞ディスパッチ(動的 custom_id)", () => {
+  it("接頭辞登録した name の前方一致で照合できる (Req 3.4)", () => {
+    const registry = createRegistry();
+    const save = makeHandler("save");
+    registry.registerPrefix("component", "checkin:save:", save);
+
+    expect(registry.lookup("component", "checkin:save:abc123")).toBe(save);
+  });
+
+  it("完全一致は接頭辞一致より優先される", () => {
+    const registry = createRegistry();
+    const exact = makeHandler("exact");
+    const prefix = makeHandler("prefix");
+    registry.register("component", "checkin:save:abc", exact);
+    registry.registerPrefix("component", "checkin:save:", prefix);
+
+    expect(registry.lookup("component", "checkin:save:abc")).toBe(exact);
+  });
+
+  it("最長一致の接頭辞ハンドラが選ばれる", () => {
+    const registry = createRegistry();
+    const broad = makeHandler("broad");
+    const narrow = makeHandler("narrow");
+    registry.registerPrefix("component", "checkin:", broad);
+    registry.registerPrefix("component", "checkin:save:", narrow);
+
+    expect(registry.lookup("component", "checkin:save:abc")).toBe(narrow);
+    expect(registry.lookup("component", "checkin:discard:xyz")).toBe(broad);
+  });
+
+  it("前方一致しない name は接頭辞ハンドラに照合されず null を返す (Req 3.4)", () => {
+    const registry = createRegistry();
+    registry.registerPrefix("component", "checkin:save:", makeHandler("save"));
+
+    expect(registry.lookup("component", "other:save:abc")).toBeNull();
+    // 区切り無し接頭辞の誤一致を防ぐ(登録側が区切りを含める規約)。
+    expect(registry.lookup("component", "checkin:savezzz")).toBeNull();
+  });
+
+  it("異なる kind には接頭辞ハンドラが照合されない", () => {
+    const registry = createRegistry();
+    registry.registerPrefix("component", "checkin:save:", makeHandler("save"));
+
+    expect(registry.lookup("modal", "checkin:save:abc")).toBeNull();
+  });
+
+  it("同一 (kind, prefix) の重複接頭辞登録を検出する(後勝ち禁止) (Req 3.6)", () => {
+    const registry = createRegistry();
+    const first = makeHandler("first");
+    registry.registerPrefix("component", "checkin:save:", first);
+
+    expect(() =>
+      registry.registerPrefix("component", "checkin:save:", makeHandler("second")),
+    ).toThrow(DuplicateHandlerError);
+    expect(registry.lookup("component", "checkin:save:abc")).toBe(first);
+  });
+});
+
 describe("module-level registerHandler / lookupHandler(デフォルトインスタンスへの委譲)", () => {
   beforeEach(() => {
     // テスト間の状態汚染を防ぐためデフォルトインスタンスを初期化する。
