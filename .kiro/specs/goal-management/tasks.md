@@ -53,7 +53,7 @@
   - _Depends: 1.2_
 
 - [ ] 3. Core: コマンド/modal/button ハンドラ
-- [ ] 3.1 `/cycle create` ハンドラを実装
+- [x] 3.1 `/cycle create` ハンドラを実装
   - InteractionContext から実行ユーザー・name/start/end を取り、期間検証→サイクル作成ドメイン呼び出し→結果整形を行う
   - 検証 NG・重複時は ephemeral エラー応答、成功時はサイクル名と期間を含む ephemeral 確認応答を返す
   - 完了状態: 正常入力でサイクルが作成され ephemeral 確認応答、不正期間/同名重複で ephemeral エラー応答が返ることを確認できる

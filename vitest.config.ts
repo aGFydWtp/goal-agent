@@ -60,6 +60,8 @@ export default defineConfig({
             "test/goal-management-goal-read.test.ts",
             // 証跡削除ドメインロジック(goal-management task 2.4)。所有者検証・リンク連動削除・not_found 正規化を検証する。
             "test/goal-management-delete-evidence.test.ts",
+            // /cycle create ハンドラ(goal-management task 3.1)。routing をモックして DO 無しで検証する。
+            "test/goal-management-cycle-create-handler.test.ts",
           ],
         },
       },
