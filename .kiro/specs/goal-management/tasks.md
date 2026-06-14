@@ -85,7 +85,7 @@
   - _Depends: 2.4_
 
 - [ ] 4. Integration: ハンドラ登録とコマンド定義集約
-- [ ] 4.1 ハンドラ登録とコマンド定義を discord-gateway へ統合
+- [x] 4.1 ハンドラ登録とコマンド定義を discord-gateway へ統合
   - cycle create / goal add(command)・goal modal(modal)・evidence delete(command)の各ハンドラを discord-gateway のレジストリへ識別子(コマンド名/custom_id)で登録する
   - goal-management のコマンド定義を discord-gateway のコマンド定義集約点へ追加する(ゲートウェイの登録機構は変更しない)
   - 完了状態: 4 ハンドラがレジストリに登録され、3 コマンド定義が集約点に含まれ、ディスパッチャから各ハンドラへ振り分けられることを確認できる

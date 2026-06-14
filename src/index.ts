@@ -10,10 +10,15 @@ import { getCycleAgent, getGoalAgent } from "./agents/routing";
 import { dispatchInteraction } from "./discord/dispatch";
 import type { DiscordEnv } from "./discord/env";
 import { verifyInteraction } from "./discord/verify";
+import { registerGoalManagement } from "./goal-management/register";
 import { createLlmClient } from "./llm/factory";
 
 export { EvaluationCycleAgent } from "./agents/evaluation-cycle-agent";
 export { GoalAgent } from "./agents/goal-agent";
+
+// goal-management のハンドラ登録とコマンド定義集約を起動時に一度行う (design L142 承認済み)。
+// dispatch はデフォルトレジストリを照合するため、interaction を受ける前に登録を済ませる。
+registerGoalManagement();
 
 /**
  * 配線疎通プローブ用のセンチネル識別子。

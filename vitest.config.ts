@@ -68,6 +68,8 @@ export default defineConfig({
             "test/goal-management-goal-modal-submit-handler.test.ts",
             // /evidence delete ハンドラ(goal-management task 3.4)。routing をモックし実 SQLite authority で DO 無しに検証する。
             "test/goal-management-evidence-delete-handler.test.ts",
+            // ハンドラ登録とコマンド定義集約(goal-management task 4.1)。registry/definitions の reset → register を純粋に検証する。
+            "test/goal-management-register.test.ts",
           ],
         },
       },
