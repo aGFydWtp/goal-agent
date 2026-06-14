@@ -26,6 +26,7 @@ export default defineConfig({
             "test/types.test.ts",
             "test/schema.test.ts",
             "test/evaluation-cycle-agent.test.ts",
+            "test/evaluation-cycle-agent-ephemeral.test.ts",
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",
@@ -52,6 +53,8 @@ export default defineConfig({
             "test/types.test.ts",
             "test/schema.test.ts",
             "test/evaluation-cycle-agent.test.ts",
+            // 汎用揮発 KV サーフェス(task 4.5, Req 3.7-3.9)。DO ランタイム上で getByName 同名解決の put/get/delete を検証する。
+            "test/evaluation-cycle-agent-ephemeral.test.ts",
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",

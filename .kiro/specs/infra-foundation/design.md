@@ -185,6 +185,7 @@ sequenceDiagram
 | 2.1, 2.4, 2.5 | §11 全テーブル DDL/制約/列挙 | schema.ts, enums.ts | `TableSchema` | — |
 | 2.2, 2.3 | 冪等マイグレーション | migrator.ts, migrations.ts | `runMigrations` | スキーマ初期化 |
 | 3.1, 3.5 | 2 Agent 骨格と責務 | evaluation-cycle-agent.ts, goal-agent.ts | Agent メソッド骨格 | 委譲 |
+| 3.7, 3.8, 3.9 | 揮発的インスタンス状態サーフェス(汎用 KV) | evaluation-cycle-agent.ts | `putEphemeral`, `getEphemeral`, `deleteEphemeral` | リクエスト跨ぎ一時保持 |
 | 3.2 | ID 規約 | ids.ts | `cycleAgentName`, `goalAgentName`, `parseAgentName` | — |
 | 3.3, 3.4, 3.6 | ルーティングヘルパー | routing.ts | `getCycleAgent`, `getGoalAgent` | ルーティング |
 | 4.1, 4.5 | LLM インターフェイス/エラー | client.ts | `LlmClient`, `LlmError` | — |
@@ -204,7 +205,7 @@ sequenceDiagram
 | Repository | persistence | 型付き行アクセス | 2.1, 2.4 | schema (P0), types (P0) | Service |
 | LlmClient + WorkersAi + Factory | llm | 差し替え可能 LLM 抽象化 | 4.1, 4.2, 4.3, 4.4, 4.5 | env.AI (P0), types (P1) | Service |
 | Agent IDs + Routing | agents | §6 ID 規約と Agent 取得 | 3.2, 3.3, 3.4, 3.6 | agents pkg (P0) | Service |
-| EvaluationCycleAgent / GoalAgent | agents | 責務骨格・データ権威/委譲 | 3.1, 3.5 | Repository (P0), Migrator (P0), LlmClient (P1) | State, Service |
+| EvaluationCycleAgent / GoalAgent | agents | 責務骨格・データ権威/委譲・揮発 KV | 3.1, 3.5, 3.7, 3.8, 3.9 | Repository (P0), Migrator (P0), LlmClient (P1) | State, Service |
 | Worker Entry + Env | worker | エントリーと型付き Env | 1.1, 1.2, 1.3, 1.4 | routing (P0) | API |
 
 ### persistence
@@ -387,19 +388,34 @@ declare function getGoalAgent(
 | Field | Detail |
 |-------|--------|
 | Intent | 責務境界を示す骨格。データ権威(Cycle)と目標単位ロジック(Goal) |
-| Requirements | 3.1, 3.5 |
+| Requirements | 3.1, 3.5, 3.7, 3.8, 3.9 |
 
 **Responsibilities & Constraints**
 - EvaluationCycleAgent: サイクル単位 SQLite を権威として保持。`onStart()` でマイグレーション実行。Repository を保持し、サイクル全体の管理・分類委譲・全体集約の責務境界メソッドを骨格として宣言。
+- EvaluationCycleAgent(揮発 KV / Req 3.7-3.9): リクエスト跨ぎの確定前一時データを保持するため、ドメイン語を含まない**汎用のキー値揮発サーフェス**(`putEphemeral`/`getEphemeral`/`deleteEphemeral`)を `@callable` で提供する。値は不透明な文字列(JSON 文字列等)として扱い、解釈・検証・スキーマは持たない(中身の意味付けは利用側スペック所有)。これは基盤プリミティブであり、ドメイン名(分類/ステータス/生成等)を含む `@callable` を Agent に増やさずに、複数 interaction にまたがる調整を上位スペックが実装できるようにする。
 - GoalAgent: 目標単位の定義保持・判定・生成の責務境界メソッドを骨格として宣言。データ読み書きは親 Cycle Agent へ委譲。
 - 骨格メソッドの実体(ドメインロジック・プロンプト)は下位スペックが実装する(本スペックは未実装スタブを残さず、ルーティング/初期化/委譲配線など基盤として完結する部分のみ実装)。
 
 **Contracts**: State [x] / Service [x]
 
+##### Service Interface
+```typescript
+// 揮発的インスタンス状態サーフェス(Req 3.7-3.9)。per-instance Map に保持、非永続。
+// 値は不透明文字列(ドメイン解釈なし)。同一論理 DO インスタンス内で put→get→delete が成立する。
+declare class EvaluationCycleAgent {
+  putEphemeral(key: string, value: string): void;   // 上書き保存
+  getEphemeral(key: string): string | null;          // 無ければ null
+  deleteEphemeral(key: string): void;                // 無キーは no-op
+}
+```
+- Postconditions: 同一論理インスタンスで `putEphemeral(k,v)` 後の `getEphemeral(k)` は `v`、`deleteEphemeral(k)` 後は `null`。
+- Invariants: キー/値ともに不透明文字列。ドメイン固有の検証・列挙・スキーマを持たない(Req 3.8)。
+- Durability: DO 再起動/ハイバネーション復帰で消失しうる。利用側は再生成可能な一時データのみ保持する(Req 3.9)。
+
 ##### State Management
-- State model: Cycle Agent = §11 全テーブル(DO SQLite)。Goal Agent = ステートレス(目標 ID をコンテキストとして親へ委譲)。
-- Persistence & consistency: 単一権威(Cycle の SQLite)により分散一貫性問題を回避。
-- Concurrency strategy: DO の単一実行モデル(per-instance シリアライズ)に依拠。
+- State model: Cycle Agent = §11 全テーブル(DO SQLite、永続)+ 揮発的インスタンス状態(per-instance `Map<string,string>`、非永続)。Goal Agent = ステートレス(目標 ID をコンテキストとして親へ委譲)。
+- Persistence & consistency: 永続データは単一権威(Cycle の SQLite)により分散一貫性問題を回避。揮発 KV は永続化されず DO ライフサイクルに従う(リクエスト跨ぎの一時調整専用)。
+- Concurrency strategy: DO の単一実行モデル(per-instance シリアライズ)に依拠。揮発 KV も同一実行モデル下で逐次アクセスされる。
 
 **Implementation Notes**
 - Integration: `wrangler.jsonc` の `durable_objects.bindings` と `migrations.new_sqlite_classes` に両クラスを登録。

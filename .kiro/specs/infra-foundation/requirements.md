@@ -43,6 +43,9 @@
 4. When 呼び出し元が userId・cycleId・goalId を指定する, the インフラ基盤 shall 対応する GoalAgent インスタンスを取得するルーティングヘルパーを提供する。
 5. The インフラ基盤 shall EvaluationCycleAgent と GoalAgent の責務分担(EvaluationCycleAgent=サイクル全体の管理と分類・委譲・全体集約、GoalAgent=目標単位の定義・証跡・判定・生成)を骨格メソッドの境界として表現する。
 6. While 同一 ID に対する複数回の取得要求がある, the インフラ基盤 shall 同一の論理 Agent インスタンスに解決する。
+7. When 上位機能が複数の Discord interaction リクエスト跨ぎで確定前の一時データ(中間処理結果など)を保持する必要がある, the EvaluationCycleAgent shall ドメイン語を含まない汎用のキー値による揮発的インスタンス状態サーフェスを提供し、同一論理 Agent インスタンス内で保存(put)→取得(get)→削除(delete)が機能する。
+8. The 揮発的インスタンス状態サーフェス shall 値を不透明な文字列として扱い、ドメイン固有の解釈・検証・スキーマ・キー命名規約を持たない(中身の意味付けは利用側スペックが所有する)。
+9. Where DO インスタンスが再起動・ハイバネーションから復帰する, the 揮発的インスタンス状態サーフェス shall 永続性を保証せず(再取得不能を許容し)、利用側は再生成可能な一時データのみを保持することを前提とする。
 
 ### Requirement 4: 差し替え可能な LLM 抽象化レイヤ
 **Objective:** As a 基盤利用者, I want プロバイダ/モデルを 1 箇所で差し替え可能な LLM 抽象化レイヤ, so that 各機能スペックがプロバイダ実装に依存せず LLM を呼び出せ、品質不足時にプロバイダを差し替えられる

@@ -91,6 +91,14 @@
   - _Requirements: 3.3, 3.4, 3.6_
   - _Depends: 4.1, 4.2, 4.3_
 
+- [x] 4.5 EvaluationCycleAgent に汎用の揮発的インスタンス状態サーフェスを追加する
+  - per-instance `Map<string,string>` を保持し、ドメイン語を含まない汎用 `@callable`(`putEphemeral(key,value)` / `getEphemeral(key)` / `deleteEphemeral(key)`)を実装する。値は不透明文字列として扱い、ドメイン解釈・検証・スキーマを持たない
+  - 非永続(DO 再起動/ハイバネーション復帰で消失可)とし、同一論理インスタンス内でリクエスト跨ぎに put→get→delete が成立することを統合テスト(workers プロジェクト, `getByName` 同名解決)で検証する
+  - 境界整合: 追加メソッド名が `test/boundary.test.ts`(Req 6.2)の禁止パターン(`classifyCheckin`/`determineStatus`/`generate*(Draft|Review|Evaluation)`/`createGoal`/`updateGoal`/`green|yellow|red`)に一致しないこと、boundary スイートが green であることを確認する
+  - 完了条件: 揮発 KV の put/get/delete が同一インスタンスで疎通し、別キー独立・上書き・削除後 null が確認でき、`pnpm typecheck` と `pnpm test`(boundary 含む)が green
+  - _Requirements: 3.7, 3.8, 3.9_
+  - _Depends: 4.2_
+
 ## 5. 統合: エントリーポイント配線
 
 - [x] 5.1 Worker エントリーポイントとルーティングヘルパー・Agent を配線する
@@ -144,3 +152,4 @@
 - 検証是正: `pnpm typecheck` は base tsconfig + `tsconfig.test.json` の両方を実行し、**node プロジェクトのテスト**(`test/**`, node:sqlite/fs 等)も型チェック対象。これにより不正 enum 値などのテスト側型ドリフトを検出する。注意: `@types/node` は base typecheck を壊す(esnext.disposable の `Disposable` が lib:["ES2022"] と衝突し goal-agent.ts の RPC 戻り値キャストが通らなくなる)ため未導入。代わりに `test/node-builtins.d.ts` で使用する node builtins だけを最小宣言。
 - 検証是正 [残課題]: **workers プロジェクトのテスト**(pool-workers, `cloudflare:test` の `Cloudflare.Env`)は静的型チェック対象外。完全な型チェックには `wrangler types` 生成型の採用 + `@cloudflare/workers-types` からの移行(プロジェクト全体の型戦略変更)が必要で、本基盤の範囲外。下位スペックで型戦略を見直す際の候補。
 - 2.3: SQL 実行 IF は `migrator.ts` の `SqlLike { exec(query, ...bindings): { toArray() } }`(`MigrationSql` は別名)に統一。repository は `SqlLike` を受け取る factory。値は全て `?` バインド、テーブル名は `SCHEMA_TABLE_NAMES`・列名は `TABLE_COLUMNS` で許可リスト検証(未知キーは throw)。ビジネスルール(値域/状態遷移/所有者)は持たない=下位スペック所有。task 4.2 では `this.ctx.storage.sql` を `SqlLike` として repository/migrator に渡せる。
+- 4.5 [追加契約 2026-06-14]: checkin-classification の `/checkin` フロー(modal submit→保存/破棄/修正ボタン)がリクエスト跨ぎで pending 分類を保持するため、汎用揮発 KV を `EvaluationCycleAgent` に追加(Req 3.7-3.9)。`@callable` の `putEphemeral(key,value)` / `getEphemeral(key): string|null` / `deleteEphemeral(key)` は per-instance `Map<string,string>` を保持し**非永続**(DO 再起動/ハイバネーション復帰で消失可)。値は不透明文字列でドメイン解釈なし。メソッド名はドメイン語を含まず `test/boundary.test.ts`(Req 6.2)の禁止パターンに一致しない(boundary green を確認済み)。検証は `test/evaluation-cycle-agent-ephemeral.test.ts`(workers プロジェクト, `getByName` 同名解決で put→get→delete・上書き・別キー独立・per-instance スコープ)。これにより下位スペックは pending 分類を不透明 JSON として DO に保持でき、ドメインロジックは worker 側に留めて境界テストに適合する。`pnpm typecheck`・`pnpm test`(516 tests)green。
