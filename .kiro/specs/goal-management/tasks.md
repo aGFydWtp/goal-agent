@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. Foundation: 横断ヘルパーとコマンド定義の整備
-- [ ] 1.1 入力検証ヘルパーを実装
+- [x] 1.1 入力検証ヘルパーを実装
   - サイクルの開始日/終了日の日付パースと期間整合(終了が開始より前でないこと)を検証する処理を実装する
   - 目標の必須項目(目標名・目標本文)の有無を検証し、不足項目を判別可能に返す処理を実装する
   - 完了状態: 不正日付で `invalid_date`、終了<開始で `end_before_start`、正常で `ok` を返し、必須欠落時に不足項目名を返すユニットテストが通る
@@ -107,3 +107,19 @@
   - 完了状態: 証跡削除の正常/非所有/不存在パスと、サイクル/目標/証跡の所有者スコープ越境拒否の統合テストが通る
   - _Requirements: 3.1, 3.2, 3.4, 3.5, 4.1, 4.2, 4.4_
   - _Depends: 4.1_
+
+## Implementation Notes
+
+実装時に確定した横断的決定(全タスク共通の前提。各タスクはこれに従う)。
+
+- **ドメインロジックの配置(design からの正当な逸脱)**: design は「EvaluationCycleAgent/GoalAgent の骨格メソッドに実装」と記すが、infra-foundation は骨格ドメインメソッドを残さず汎用 passthrough(`insertRow`/`getRowById`/`listRowsBy`/`updateRow`/`removeRow`)のみを公開しており、さらに infra 所有の `test/boundary.test.ts`(task 6.4)が Agent ファイルへのドメインメソッド追加を機械的に禁止している。したがって本スペックは **`src/agents/*.ts` を一切変更せず**、ドメインロジックを `src/goal-management/domain/*` の関数として実装し、Agent の汎用データ権威サーフェスを消費する。これらドメイン関数(`createCycle`/`addGoal`/`listGoals`/`getGoal`/`deleteEvidence`/`resolveActiveCycle`/`getGoalDefinition`)を goal-management の公開契約として export し、下流(checkin-classification / status-and-draft)が import 消費する。
+- **データ権威インターフェイス**: domain 関数は Agent 依存を避けるため、最小の async データ権威 IF(`insertRow`/`getRowById`/`listRowsBy`/`removeRow` の subset。本スペックで `CycleDataAuthority` として定義)を引数に取る。DO スタブ(`getCycleAgent` 戻り値)が構造的に満たす。ユニットテスト(node プロジェクト)は `createRepository(NodeSqliteBackend)` を async ラップしたアダプタを渡して DO 無しで検証する。
+- **ユーザー単位データホーム ルーティング規約**: `/cycle create` のサイクル名重複検出(Req 1.5)・`/goal add`/`/evidence delete` の対象解決(interaction に cycleId が無い)・最新サイクル取得(Req 2.6 / design L387)はすべて「ユーザーの全サイクルが 1 つの DB に集約」されている必要がある。よって本スペックはユーザーの全 cycle/goal/evidence データを **単一の EvaluationCycleAgent インスタンス**(`getCycleAgent(env, userId, PRIMARY_CYCLE_KEY)`、`PRIMARY_CYCLE_KEY = "primary"` = `evaluation:{userId}:primary`)へ集約する。GoalAgent も `getGoalAgent(env, userId, PRIMARY_CYCLE_KEY, goalId)` で同一ホームに解決する。論理サイクル id(`evaluation_cycles.id`)は `/cycle create` ごとに生成して行に保持し(`goals.cycle_id` が参照)、DO ルーティングには用いない。この規約は `src/goal-management/routing.ts` に定義・export し、下流スペックも同一規約に従う(infra 変更は不要)。
+- **対象サイクル決定規約(`resolveActiveCycle`)**: 実行ユーザーが所有する最新(`created_at` 最大)の `evaluation_cycles` 行。無ければ `null`。`addGoal` はこれを内部で解決し、無ければ `no_cycle` を返す(handlers は cycleId を持たないため design の `cycleId` 引数は採らない)。
+- **ID / タイムスタンプ注入**: domain 関数は `deps: { newId(): string; now(): string }` を受ける(テスト決定性のため)。本番既定は `{ newId: () => crypto.randomUUID(), now: () => new Date().toISOString() }`。
+- **dueDate の永続化**: `goals` に専用列が無いため(infra §11 所有)、`GoalInput.dueDate` 指定時は `evaluation_points` テキスト末尾へ `期限: YYYY-MM-DD` 行として畳み込む(design L386/L450)。スキーマ変更はしない。
+- **新規目標の初期ステータス**: `status='gray'`(Req 2.8。boundary.test の禁止リテラル green/yellow/red に gray は含まれず許容)。
+- **ハンドラ契約**: ハンドラは discord-gateway の `InteractionHandler { handle(ctx: InteractionContext, env: DiscordEnv): HandlerResult | Promise<HandlerResult> }` を実装する(env 型は `Env` ではなく `DiscordEnv`)。応答は `reply`(ephemeral)/`modal`。command options・modal フィールドは `ctx.raw`(`APIInteraction`)から discord-api-types で narrow して読む。
+- **登録の配線**: `src/goal-management/register.ts` が `registerHandler`(`src/discord/registry.ts`)と `registerCommandDefinition`(`src/discord/commands/definitions.ts`)を呼ぶ。production は `src/index.ts` が register をロードして起動時登録する(統合点 index.ts の変更は design L142 で承認済み)。テストは reset 後に登録関数を明示呼び出しできるよう、登録ロジックは関数として export する。
+- **テスト配置**: 純粋ロジック/domain ユニットは node プロジェクト、ハンドラ統合は workers プロジェクト。新規テストファイルは `vitest.config.ts` の対応する include 配列へ追加する。
+- **コード規約**: TypeScript strict、`any` 禁止(biome `noExplicitAny: error`)、2 space / lineWidth 100。共有型は `src/types` から import。

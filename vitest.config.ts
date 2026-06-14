@@ -46,6 +46,8 @@ export default defineConfig({
             "test/discord-command-register.test.ts",
             // コマンド登録スモーク(task 5.2)。集約点 → register の end-to-end を fetch モックで疎通確認する。
             "test/discord-register-smoke.test.ts",
+            // 入力検証ヘルパー(goal-management task 1.1)。日付/期間/必須項目の純粋ロジック。
+            "test/goal-management-validation.test.ts",
           ],
         },
       },
