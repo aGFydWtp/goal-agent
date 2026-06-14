@@ -25,7 +25,7 @@
   - _Boundary: Status Rules + Prompt + Schema + Verify_
 
 - [ ] 3. コア: ドラフト生成エンジン
-- [ ] 3.1 (P) §13.3 ドラフト生成・調整プロンプトと出力スキーマ・検証を実装する
+- [x] 3.1 (P) §13.3 ドラフト生成・調整プロンプトと出力スキーマ・検証を実装する
   - 対象証跡から事実/解釈/課題/次アクションを分離生成するプロンプトを組み立て、誇張抑制と「証跡にない内容は推測明示」を指示する
   - 4 種の調整(短縮/成果強調/課題明確化/上司向け)の再生成プロンプトを組み立て、成果強調でも事実を捏造しない指示を維持する
   - 4 セクション + 推測注記の構造化出力型と検証、調整 kind から drafts type への対応(初期=self_evaluation、上司向け=manager_summary、短縮=short_summary)を実装する
@@ -110,3 +110,7 @@
 - 1.1: ドメイン操作は `src/status-and-draft/domain/*.ts` の純粋関数として実装し、`src/goal-management/domain/cycle-operations.ts` の `CycleDataAuthority`/`DomainDeps`/`resolveActiveCycle`/`listGoals`/`getGoal` を消費する。**`src/agents/*.ts`(GoalAgent/EvaluationCycleAgent)は変更しない** — design「Modified Files: agents/*.ts」は確立済みの純粋関数パターン(goal-management/checkin と同型)に置き換わる。揮発 pending は Map ベースの store + `DomainDeps.newId()/now()` で保持(checkin の `checkin-operations.ts` 参照)。
 - 1.1: LLM は `llm.completeJson(req, zodSchema)` → `LlmResult<T>`(`{ok:true,value}` / `{ok:false,error:{kind}}`、`invalid_output` で検証 NG)。zod スキーマは `src/{feature}/.../schema.ts` に所有。`GoalStatus`/`DraftType` の zod は未提供のため `z.enum(GOAL_STATUSES)`/`z.enum(DRAFT_TYPES)`(`src/types/enums.ts` の const タプル)から組む。
 - 1.1: discord dispatcher はトップレベルコマンド名のみでハンドラ解決。`/goal status`・`/evidence list` は goal-management 所有の `goal`/`evidence` トップレベルと衝突するため、登録(task 6.x)で既存定義へ `status`/`list` サブコマンドを統合する必要がある。1.1 ではサブコマンド/オプション名の定数 export に留め、`statusAndDraftCommandDefinitions` には `/status`・`/draft` のみ含めた。
+- 2.2: design の `import { goalStatusSchema } from "../types/enums"` は未提供。`status/schema.ts` で `z.enum(GOAL_STATUSES)` からローカルに組む。`combineVerdict` は zod 済み LlmResult を信頼し再検証せず、`llm.ok:false`(全 LlmError kind)時は `rule.candidate` + 空 reason/risks/nextActions + `reasonMissing:true` を返す。
+- 2.2: design §13.2 は「マイルストーン」を入力に挙げるが `GoalStatusContext`(rules.ts)に milestone フィールドは無い。task 5.1 の `collectGoalContext` で必要なら追加する判断が要る。現状 `buildStatusPrompt` は既存フィールドのみ使用。
+- 3.1: `RefineKind`(="shorten"|"strengthen"|"clarify"|"manager")は `draft/schema.ts` が正規の export 元(後続 import 元)。task 1.1 の `custom-ids.ts` にも構造同一の alias が存在する(境界外のため未統合・型エラーなし)。`refineKindToDraftType`: null=self_evaluation / manager=manager_summary / shorten=short_summary / strengthen,clarify=self_evaluation。空証跡ガードは `buildDraftPrompt` ではなく task 5.3 の `generateDraft` が担う。
+- 環境: 本セッション中、作業ツリーに **並行する discord-gateway 実装ストリーム**(`src/discord/*`・`tsconfig.test.json`・`test/discord-*`)が混在。status-and-draft の各タスクは選択的ステージングで自タスクのファイルのみコミットすること。
