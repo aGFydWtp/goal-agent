@@ -1,4 +1,5 @@
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import agents from "agents/vite";
 import { defineConfig } from "vitest/config";
 
 // 2 つの vitest プロジェクトを使い分ける:
@@ -26,14 +27,21 @@ export default defineConfig({
       },
       {
         // Workers ランタイム上で動かすテスト(型・スキーマ定義など)。
+        // `agents/vite` は `@callable()` の TC39 デコレータ変換を行う
+        // (pool-workers の oxc/esbuild はデコレータ未対応のため必須)。
         plugins: [
+          ...agents(),
           cloudflareTest({
             wrangler: { configPath: "./wrangler.jsonc" },
           }),
         ],
         test: {
           name: "workers",
-          include: ["test/types.test.ts", "test/schema.test.ts"],
+          include: [
+            "test/types.test.ts",
+            "test/schema.test.ts",
+            "test/evaluation-cycle-agent.test.ts",
+          ],
         },
       },
     ],

@@ -72,7 +72,7 @@
   - _Boundary: Agent IDs + Routing_
   - _Depends: 1.1_
 
-- [ ] 4.2 EvaluationCycleAgent 骨格を実装する(データ権威)
+- [x] 4.2 EvaluationCycleAgent 骨格を実装する(データ権威)
   - サイクル単位 DO SQLite を権威として保持し、起動時にマイグレーションランナーを実行する
   - リポジトリを保持し、サイクル全体の管理・分類委譲・全体集約に対応する責務境界メソッドを骨格として宣言する(ドメインロジック本体は下位スペックが実装)
   - 完了条件: Agent 起動時にスキーマが初期化済みになり、リポジトリ経由でデータ読み書きが疎通する
@@ -138,5 +138,7 @@
 - 2.2 [設計 revalidation]: design.md L234 の `SqlExecutor`(タグ付きテンプレート型)は生 DDL 文字列を実行できない(補間値がパラメータバインドされる)。実装は実 Cloudflare API `SqlStorage.exec(query, ...bindings)` をモデルした最小 IF `MigrationSql { exec(query, ...bindings): { toArray() } }` に変更。task 4.2 で `this.ctx.storage.sql` を直接渡せる。設計意図(version 台帳での冪等適用)は不変。下位スペックは `SqlExecutor` ではなくこの exec 形 IF を前提にすること。
 - 2.2 [vitest projects]: `pnpm test` は node プロジェクト(`environment: node`、`node:sqlite` 使用の純ロジック/永続化テスト)と workers プロジェクト(pool-workers、Cloudflare リモート接続)を両方実行する。**各プロジェクトは明示 `include` 許可リスト**なので、新規テストファイルは必ず vitest.config.ts の該当 `include` に追記しないと実行されない(サイレントに無視される)。永続化/純ロジック系→node、Workers ランタイム依存→workers。
 - 2.2: マイグレーション v1 = 台帳 DDL + `SCHEMA_STATEMENTS`(schema.ts から import、再定義しない)。台帳は `schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`。
+- 4.2 [設計 revalidation — 重要]: マイグレーションは `onStart` ではなく **DO コンストラクタ**で実行する。理由: `onStart` は async で RPC ハンドラ完了をゲートしない(スキーマ未初期化のまま最初の RPC が走り `no such table` になる)。DO コンストラクタは全ハンドラより前に同期完了するため、ここで `runMigrations(this.ctx.storage.sql)` + `createRepository` を実行する(agents SDK 自身も `_ensureSchema` をコンストラクタで実行)。design.md の L132/226/253/393「onStart で migrate」表記は「コンストラクタ」に読み替えること。`onStart` 自体は他用途(notifications のスケジュール登録等)に引き続き利用可能。
+- 4.2: `@callable` は TC39 デコレータのため、pool-workers テストでは vitest.config.ts の workers プロジェクト plugins に `agents/vite`(`...agents()`)を追加しないと変換されず `SyntaxError` になる。DO 統合テストは `env.EvaluationCycleAgent.getByName(name)` + RPC スタブ(cloudflare:test)で実 DO 上を検証。データ権威メソッド = `insertRow/getRowById/listRowsBy/updateRow/removeRow`(repository への generic passthrough、ドメインルールなし)。
 - 3.2: Workers AI は `env.AI.run(model, inputs)` 入力 `{ prompt | messages, max_tokens, temperature }`(AiTextGenerationInput)・出力 `{ response?: string }`。モデル id は **factory.ts のみ**に集約(`@cf/meta/llama-3.1-8b-instruct-fp8`)、`WorkersAiLlmClient` はモデルをコンストラクタ注入。`completeJson` は JSON.parse 失敗・zod safeParse 失敗の両方を `invalid_output`(cause=parse error / zod issues)で返す。基盤呼び出し throw は provider_error、AbortError/TimeoutError は timeout。利用側は `LlmClient` 契約のみ依存。
 - 2.3: SQL 実行 IF は `migrator.ts` の `SqlLike { exec(query, ...bindings): { toArray() } }`(`MigrationSql` は別名)に統一。repository は `SqlLike` を受け取る factory。値は全て `?` バインド、テーブル名は `SCHEMA_TABLE_NAMES`・列名は `TABLE_COLUMNS` で許可リスト検証(未知キーは throw)。ビジネスルール(値域/状態遷移/所有者)は持たない=下位スペック所有。task 4.2 では `this.ctx.storage.sql` を `SqlLike` として repository/migrator に渡せる。
