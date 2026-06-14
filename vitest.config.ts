@@ -40,6 +40,8 @@ export default defineConfig({
             "test/discord-dispatch.test.ts",
             // コマンド定義の集約点(task 3.3)。空の集約 + 追加できる構造の純粋ロジック。
             "test/discord-command-definitions.test.ts",
+            // コマンド登録スクリプト(task 3.4)。fetch モックで bulk overwrite を純粋に検証する。
+            "test/discord-command-register.test.ts",
           ],
         },
       },
