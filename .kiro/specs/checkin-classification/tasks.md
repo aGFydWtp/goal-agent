@@ -18,7 +18,7 @@
   - _Requirements: 1.4, 2.4, 2.5, 2.6_
   - _Boundary: Classification Prompt Schema Verify_
 
-- [ ] 1.3 (P) 分類プロンプトと週次レビュープロンプトを実装する
+- [x] 1.3 (P) 分類プロンプトと週次レビュープロンプトを実装する
   - 目標一覧(id/title/description/success_criteria)とユーザー入力から §13.1 入力(目標 + 達成条件 + 今週の入力)を反映した分類プロンプトを組み立てる
   - 保存済み内容から summary/risks/next_actions を生成する週次レビュープロンプトと出力検証を実装する
   - 完了状態: 与えた目標と入力がプロンプト本文に反映され、週次レビュープロンプトが summary/risks/next_actions を要求する構造になっていることをユニットテストで確認できる

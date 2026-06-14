@@ -56,6 +56,8 @@ export default defineConfig({
             "test/checkin-classification-commands.test.ts",
             // 分類構造化出力スキーマと検証(checkin-classification task 1.2)。zod schema と純粋検証ロジック。
             "test/checkin-classification-classification.test.ts",
+            // 分類/週次レビュープロンプト(checkin-classification task 1.3)。純粋な prompt/schema helper。
+            "test/checkin-classification-prompts.test.ts",
             // サイクル作成ドメインロジック(goal-management task 2.1)。実 SQLite を async ラップして検証する。
             "test/goal-management-cycle-operations.test.ts",
             // 目標登録ドメインロジック(goal-management task 2.2)。対象サイクル解決と goals insert を検証する。
