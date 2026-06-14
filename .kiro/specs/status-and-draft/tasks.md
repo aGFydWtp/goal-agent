@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- [ ] 1. 基盤: コマンド定義・custom_id 規約・登録の骨組み
-- [ ] 1.1 status-and-draft のコマンド定義と custom_id 規約を確立する
+- [x] 1. 基盤: コマンド定義・custom_id 規約・登録の骨組み
+- [x] 1.1 status-and-draft のコマンド定義と custom_id 規約を確立する
   - `/status`・`/goal status`(goal オプション)・`/evidence list`・`/draft`(goal オプション / all)の application command 定義を用意する
   - 調整ボタン4種([短くする]/[成果を強める]/[課題を明確にする]/[上司向けにする])と[保存]ボタンの custom_id 規約を定義し、draftPendingId と調整 kind を埋め込み・抽出できるようにする
   - 完了条件: コマンド定義オブジェクトと custom_id の組立/解析関数がエクスポートされ、kind と draftPendingId が往復で一致する
@@ -104,3 +104,9 @@
   - 完了条件: クリティカルパス E2E と再利用契約スモーク・LLM フォールバックが通り、drafts に保存行が確認できる
   - _Requirements: 1.5, 1.6, 7.5, 8.5_
   - _Depends: 6.3_
+
+## Implementation Notes
+- 1.1: テスト登録は `vitest.config.ts` の node プロジェクトを glob 化済み(`include: ["test/**/*.test.ts"]` + workers のみ exclude)。新規 node テストは `test/*.test.ts` に置けば自動実行され、config 編集は不要(共有 config の競合回避)。workers ランタイムテストを追加する場合のみ exclude へ追記する。
+- 1.1: ドメイン操作は `src/status-and-draft/domain/*.ts` の純粋関数として実装し、`src/goal-management/domain/cycle-operations.ts` の `CycleDataAuthority`/`DomainDeps`/`resolveActiveCycle`/`listGoals`/`getGoal` を消費する。**`src/agents/*.ts`(GoalAgent/EvaluationCycleAgent)は変更しない** — design「Modified Files: agents/*.ts」は確立済みの純粋関数パターン(goal-management/checkin と同型)に置き換わる。揮発 pending は Map ベースの store + `DomainDeps.newId()/now()` で保持(checkin の `checkin-operations.ts` 参照)。
+- 1.1: LLM は `llm.completeJson(req, zodSchema)` → `LlmResult<T>`(`{ok:true,value}` / `{ok:false,error:{kind}}`、`invalid_output` で検証 NG)。zod スキーマは `src/{feature}/.../schema.ts` に所有。`GoalStatus`/`DraftType` の zod は未提供のため `z.enum(GOAL_STATUSES)`/`z.enum(DRAFT_TYPES)`(`src/types/enums.ts` の const タプル)から組む。
+- 1.1: discord dispatcher はトップレベルコマンド名のみでハンドラ解決。`/goal status`・`/evidence list` は goal-management 所有の `goal`/`evidence` トップレベルと衝突するため、登録(task 6.x)で既存定義へ `status`/`list` サブコマンドを統合する必要がある。1.1 ではサブコマンド/オプション名の定数 export に留め、`statusAndDraftCommandDefinitions` には `/status`・`/draft` のみ含めた。

@@ -15,81 +15,24 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          // 永続化のユニットテスト群。node:sqlite を使う migrator/repository はここで動かす。
-          include: [
-            "test/migrator.test.ts",
-            "test/repository.test.ts",
-            "test/llm-client.test.ts",
-            "test/llm-workers-ai.test.ts",
-            "test/agent-ids.test.ts",
-            // 境界整合の機械的検証(task 6.4)。node:fs でソースを静的検査するため node プロジェクト。
-            "test/boundary.test.ts",
-            // Ed25519 署名検証(task 2.1)。discord-interactions verifyKey の純粋ロジック。
-            "test/discord-verify.test.ts",
-            // 応答ユーティリティ(task 2.2)。応答ボディ生成の純粋ロジック。
-            "test/discord-response.test.ts",
-            // REST クライアント(task 2.3)。fetch モックで純粋に検証する。
-            "test/discord-rest.test.ts",
-            // follow-up 送信ユーティリティ(task 2.4)。fetch モックで純粋に検証する。
-            "test/discord-followup.test.ts",
-            // プロアクティブ送信ヘルパー(task 2.5)。fetch モックで純粋に検証する。
-            "test/discord-proactive.test.ts",
-            // プロアクティブ送信のプライバシー境界(task 5.3)。送信先 URL 限定と export 面を fetch モックで構造検証する。
-            "test/discord-proactive-privacy.test.ts",
-            // ハンドラレジストリ(task 3.1)。(kind,name)→handler のマップ規約の純粋ロジック。
-            "test/discord-registry.test.ts",
-            // interaction ディスパッチャ(task 3.2)。fake ctx + fetch モックで純粋に検証する。
-            "test/discord-dispatch.test.ts",
-            // コマンド定義の集約点(task 3.3)。空の集約 + 追加できる構造の純粋ロジック。
-            "test/discord-command-definitions.test.ts",
-            // コマンド登録スクリプト(task 3.4)。fetch モックで bulk overwrite を純粋に検証する。
-            "test/discord-command-register.test.ts",
-            // コマンド登録スモーク(task 5.2)。集約点 → register の end-to-end を fetch モックで疎通確認する。
-            "test/discord-register-smoke.test.ts",
-            // 入力検証ヘルパー(goal-management task 1.1)。日付/期間/必須項目の純粋ロジック。
-            "test/goal-management-validation.test.ts",
-            // 所有者スコープ強制ヘルパー(goal-management task 1.2)。user_id 一致検証の純粋ロジック。
-            "test/goal-management-ownership.test.ts",
-            // コマンド定義(goal-management task 1.3)。application command 定義と modal custom_id 規約の純粋データ。
-            "test/goal-management-commands.test.ts",
-            // コマンド定義(checkin-classification task 1.1)。/checkin command 定義と custom_id 規約の純粋データ。
-            "test/checkin-classification-commands.test.ts",
-            // 分類構造化出力スキーマと検証(checkin-classification task 1.2)。zod schema と純粋検証ロジック。
-            "test/checkin-classification-classification.test.ts",
-            // 分類/週次レビュープロンプト(checkin-classification task 1.3)。純粋な prompt/schema helper。
-            "test/checkin-classification-prompts.test.ts",
-            // メッセージ整形ヘルパー(checkin-classification task 1.4)。§8.3/§14.1/§14.2 の純粋 formatter。
-            "test/checkin-classification-messages.test.ts",
-            // チェックインドメイン操作(checkin-classification task 2.1)。対象サイクル解決と pending 揮発保持を検証する。
-            "test/checkin-classification-checkin-operations.test.ts",
-            // 分類実行ドメインメソッド(checkin-classification task 2.2)。目標取得→LLM→検証→pending 保持を検証する。
-            "test/checkin-classification-classify-domain.test.ts",
-            // 証跡化保存ドメインメソッド(checkin-classification task 2.3)。pending 確定→checkins/evidence/links 保存とロールバックを検証する。
-            "test/checkin-classification-save-domain.test.ts",
-            // 週次レビュー生成ドメインメソッド(checkin-classification task 2.4)。保存済み内容→LLM→weekly_reviews 保存と失敗時の証跡保持を検証する。
-            "test/checkin-classification-weekly-review-domain.test.ts",
-            // サイクル作成ドメインロジック(goal-management task 2.1)。実 SQLite を async ラップして検証する。
-            "test/goal-management-cycle-operations.test.ts",
-            // 目標登録ドメインロジック(goal-management task 2.2)。対象サイクル解決と goals insert を検証する。
-            "test/goal-management-add-goal.test.ts",
-            // 目標一覧/取得ドメインロジック(goal-management task 2.3)。所有者/サイクルスコープと親委譲を検証する。
-            "test/goal-management-goal-read.test.ts",
-            // 証跡削除ドメインロジック(goal-management task 2.4)。所有者検証・リンク連動削除・not_found 正規化を検証する。
-            "test/goal-management-delete-evidence.test.ts",
-            // /cycle create ハンドラ(goal-management task 3.1)。routing をモックして DO 無しで検証する。
-            "test/goal-management-cycle-create-handler.test.ts",
-            // /goal add ハンドラ(goal-management task 3.2)。modal 提示 payload を DO 無しで構造検証する。
-            "test/goal-management-goal-add-handler.test.ts",
-            // goal modal submit ハンドラ(goal-management task 3.3)。必須検証→保存→GoalAgent 確立を DO 無しで検証する。
-            "test/goal-management-goal-modal-submit-handler.test.ts",
-            // /evidence delete ハンドラ(goal-management task 3.4)。routing をモックし実 SQLite authority で DO 無しに検証する。
-            "test/goal-management-evidence-delete-handler.test.ts",
-            // ハンドラ登録とコマンド定義集約(goal-management task 4.1)。registry/definitions の reset → register を純粋に検証する。
-            "test/goal-management-register.test.ts",
-            // サイクル/目標登録の統合テスト(goal-management task 5.1)。routing をモックし単一の実 SQLite 権威を共有させ、cycle-create → goal-add → modal submit → 目標一覧の連結を検証する。
-            "test/goal-management-cycle-goal-integration.test.ts",
-            // 証跡削除と所有者スコープの境界統合テスト(goal-management task 5.2)。単一権威に複数ユーザーのデータを同居させ、/evidence delete のリンク連動削除・不存在/非所有の同一文言化と、サイクル/目標/証跡を横断した越境拒否(null/not_found)を検証する。
-            "test/goal-management-evidence-scope-integration.test.ts",
+          // 純ロジック/永続化のユニットテスト群(node:sqlite を使う migrator/repository 等)。
+          // 各スペックがファイルごとに登録する allowlist 方式は共有 config への頻繁な競合編集を
+          // 招くため、test/ 直下の *.test.ts を glob で自動取り込みする。workers ランタイムを
+          // 要するテストだけを下の exclude で除外する(node 環境では二重実行/環境不一致になるため)。
+          include: ["test/**/*.test.ts"],
+          // workers プロジェクト(下記)で実行するランタイム統合テスト。node からは除外する。
+          // ここに列挙されない新規 *.test.ts は自動的に node プロジェクトで実行される。
+          exclude: [
+            "test/types.test.ts",
+            "test/schema.test.ts",
+            "test/evaluation-cycle-agent.test.ts",
+            "test/goal-agent.test.ts",
+            "test/routing.test.ts",
+            "test/worker-entry.test.ts",
+            "test/discord-worker-interactions.test.ts",
+            "test/discord-dispatch-integration.test.ts",
+            "test/discord-ping-smoke.test.ts",
+            "test/integration.test.ts",
           ],
         },
       },
