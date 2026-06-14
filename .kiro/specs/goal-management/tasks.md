@@ -23,7 +23,7 @@
   - _Depends: 1.1_
 
 - [ ] 2. Core: ドメイン CRUD ビジネスロジック
-- [ ] 2.1 サイクル作成ドメインロジックを実装(EvaluationCycleAgent メソッド)
+- [x] 2.1 サイクル作成ドメインロジックを実装(EvaluationCycleAgent メソッド)
   - 実行ユーザーを所有者として付与し、同一ユーザー内の同名サイクル重複を検出してから Repository へ永続化する処理を、EvaluationCycleAgent の骨格メソッドの実体として実装する
   - 完了状態: 重複なしで `evaluation_cycles` 行が user_id 付きで insert され、同名重複で `duplicate` を返すユニットテストが通る
   - _Requirements: 1.2, 1.5, 4.3, 5.3, 5.4_

@@ -52,6 +52,8 @@ export default defineConfig({
             "test/goal-management-ownership.test.ts",
             // コマンド定義(goal-management task 1.3)。application command 定義と modal custom_id 規約の純粋データ。
             "test/goal-management-commands.test.ts",
+            // サイクル作成ドメインロジック(goal-management task 2.1)。実 SQLite を async ラップして検証する。
+            "test/goal-management-cycle-operations.test.ts",
           ],
         },
       },
