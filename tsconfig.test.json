@@ -29,6 +29,7 @@
     "test/discord-rest.test.ts",
     "test/discord-followup.test.ts",
     "test/discord-proactive.test.ts",
+    "test/discord-proactive-privacy.test.ts",
     "test/discord-registry.test.ts",
     "test/discord-dispatch.test.ts",
     "test/discord-command-definitions.test.ts",

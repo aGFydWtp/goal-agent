@@ -34,6 +34,8 @@ export default defineConfig({
             "test/discord-followup.test.ts",
             // プロアクティブ送信ヘルパー(task 2.5)。fetch モックで純粋に検証する。
             "test/discord-proactive.test.ts",
+            // プロアクティブ送信のプライバシー境界(task 5.3)。送信先 URL 限定と export 面を fetch モックで構造検証する。
+            "test/discord-proactive-privacy.test.ts",
             // ハンドラレジストリ(task 3.1)。(kind,name)→handler のマップ規約の純粋ロジック。
             "test/discord-registry.test.ts",
             // interaction ディスパッチャ(task 3.2)。fake ctx + fetch モックで純粋に検証する。
