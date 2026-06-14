@@ -75,6 +75,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.5_
   - _Boundary: Checkin Command Handler, Input Button Handler_
   - _Depends: 1.1, 1.4, 2.1_
+  - _Blocked: discord-gateway の `HandlerResult`/`reply` 契約が message components/buttons を表現できず、Req 1.1 の「促し + [入力する] ボタン」を downstream 側で実装できない。`src/discord/types.ts` の reply は content/ephemeral のみ、`src/discord/response.ts` と `src/discord/dispatch.ts` も components を渡さない。discord-gateway 所有タスクで reply/follow-up に button action row を載せる公開契約を追加してから再開する。_
 
 - [ ] 3.2 (P) checkin modal submit ハンドラ(分類 = deferred)を実装する
   - 空入力ガードを通し、空なら ephemeral 通知。入力ありなら 3秒以内に deferred(ephemeral)応答を返し、分類を後処理で実行する
