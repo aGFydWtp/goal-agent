@@ -2,7 +2,7 @@
 
 > 依存方向: `commands.ts`・`custom-ids.ts` → `register.ts` → `handlers/*` → `domain/checkin-operations.ts` → infra `Repository`/`LlmClient` & goal-management `listGoals/getGoal`。`classification/*`・`weekly-review/*`・`messages.ts` は domain から参照される横断ヘルパー。上流(infra-foundation / discord-gateway / goal-management)の公開契約は再定義せず消費する。
 
-- [ ] 1. Foundation: コマンド定義・custom_id 規約・横断ヘルパーの確立
+- [x] 1. Foundation: コマンド定義・custom_id 規約・横断ヘルパーの確立
 - [x] 1.1 `/checkin` コマンド定義と custom_id 規約を定義する
   - `/checkin` の application command 定義(引数なし)を作成する
   - checkin modal の custom_id(`CHECKIN_MODAL_ID`)、[入力する]/[保存]/[修正]/[破棄] ボタンの custom_id 規約を定義し、保存/修正/破棄ボタンには pending 識別子を埋め込む/抽出するユーティリティを用意する
@@ -25,7 +25,7 @@
   - _Requirements: 2.1, 2.2, 5.1_
   - _Boundary: Classification Prompt Schema Verify, Weekly Review Prompt_
 
-- [ ] 1.4 (P) メッセージ整形ヘルパーを実装する
+- [x] 1.4 (P) メッセージ整形ヘルパーを実装する
   - §8.3 の促し文を返す整形を実装する
   - 分類結果を §14.1 形式(目標ごとグルーピング + 未分類セクション + 保存しますか?)へ整形する
   - 週次レビューを §14.2 形式(保存完了 + 見立て + 来週やるとよいこと)へ整形し、ステータス見立ては与えられた時のみ含め未指定時は省略する
