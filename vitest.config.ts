@@ -72,6 +72,8 @@ export default defineConfig({
             "test/goal-management-register.test.ts",
             // サイクル/目標登録の統合テスト(goal-management task 5.1)。routing をモックし単一の実 SQLite 権威を共有させ、cycle-create → goal-add → modal submit → 目標一覧の連結を検証する。
             "test/goal-management-cycle-goal-integration.test.ts",
+            // 証跡削除と所有者スコープの境界統合テスト(goal-management task 5.2)。単一権威に複数ユーザーのデータを同居させ、/evidence delete のリンク連動削除・不存在/非所有の同一文言化と、サイクル/目標/証跡を横断した越境拒否(null/not_found)を検証する。
+            "test/goal-management-evidence-scope-integration.test.ts",
           ],
         },
       },
