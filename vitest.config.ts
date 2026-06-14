@@ -22,6 +22,8 @@ export default defineConfig({
             "test/llm-client.test.ts",
             "test/llm-workers-ai.test.ts",
             "test/agent-ids.test.ts",
+            // 境界整合の機械的検証(task 6.4)。node:fs でソースを静的検査するため node プロジェクト。
+            "test/boundary.test.ts",
           ],
         },
       },
