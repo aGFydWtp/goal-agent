@@ -10,7 +10,7 @@
   - _Requirements: 1.1, 3.2, 3.7_
   - _Boundary: Command Definitions, custom-ids_
 
-- [ ] 1.2 (P) 分類の構造化出力スキーマと検証を実装する
+- [x] 1.2 (P) 分類の構造化出力スキーマと検証を実装する
   - §13.1 準拠の分類結果型(items[].text / candidateGoals[].goalId・relevanceScore・reason / usefulness / suggestedEvidenceTitle)を定義する(infra の共有基本型 `Usefulness`/`RelevanceScore` を組み合わせる)
   - `completeJson` 戻り値の構造・型・値域(relevanceScore 0..1、usefulness 列挙、goalId が実在目標集合に含まれる)を検証し、候補目標が無い項目を未分類として保持する検証関数を実装する
   - 空/空白のみ入力を分類前に弾く空入力ガードを実装する
