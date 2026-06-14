@@ -64,6 +64,8 @@ export default defineConfig({
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",
+            // interactions パスの Worker エントリー統合(task 4.1)。ExecutionContext を要するため workers。
+            "test/discord-worker-interactions.test.ts",
             "test/integration.test.ts",
           ],
         },

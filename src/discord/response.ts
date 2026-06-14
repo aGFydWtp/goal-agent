@@ -1,10 +1,10 @@
-import {
-  type APIInteractionResponseChannelMessageWithSource,
-  type APIInteractionResponseDeferredChannelMessageWithSource,
-  type APIInteractionResponsePong,
-  type APIModalInteractionResponse,
-  InteractionResponseType,
-  MessageFlags,
+import { InteractionResponseFlags, InteractionResponseType } from "discord-interactions";
+
+import type {
+  APIInteractionResponseChannelMessageWithSource,
+  APIInteractionResponseDeferredChannelMessageWithSource,
+  APIInteractionResponsePong,
+  APIModalInteractionResponse,
 } from "discord-api-types/v10";
 
 import type { HandlerResult } from "./types";
@@ -19,9 +19,14 @@ import type { HandlerResult } from "./types";
  * 依存方向: 本モジュールは `./types` と `discord-api-types` のみ参照し、registry /
  * dispatch / rest を import しない(上方向 import 禁止)。
  *
- * type 定数(1/4/5/9, ephemeral=64)は `discord-api-types` の
- * {@link InteractionResponseType} / {@link MessageFlags} enum を用いて型安全に扱う
- * (値は design 記載と一致することをテストで固定する)。
+ * type 定数(1/4/5/9, ephemeral=64)は本番 workerd ランタイム上で値が正しく解決される
+ * `discord-interactions` の runtime enum({@link InteractionResponseType} /
+ * {@link InteractionResponseFlags})を用いる。`discord-api-types` は応答ボディの
+ * 型(`APIInteractionResponse*`)のみを型として参照する(値 import はしない。design
+ * §Technology Stack: discord-api-types は型のみでランタイムコストゼロ)。`discord-api-types`
+ * の enum 値は workerd バンドル上で undefined に解決される既知の不具合があるため、
+ * 実行時参照は `discord-interactions` 側へ寄せる。値は design 記載(1/4/5/9, 64)と
+ * 一致することをテストで固定する。
  */
 
 /** {@link reply} / {@link deferred} の任意オプション。 */
@@ -42,18 +47,18 @@ export type ModalInput = Omit<Extract<HandlerResult, { mode: "modal" }>, "mode">
 /**
  * ephemeral 指定を Discord の message flags へ変換する。
  *
- * `ephemeral` が true のときのみ {@link MessageFlags.Ephemeral}(64)を返す。それ以外は
- * `undefined` を返し、応答ボディの `data.flags` を省略する。
+ * `ephemeral` が true のときのみ {@link InteractionResponseFlags.EPHEMERAL}(64)を返す。
+ * それ以外は `undefined` を返し、応答ボディの `data.flags` を省略する。
  */
-function ephemeralFlag(ephemeral?: boolean): MessageFlags | undefined {
-  return ephemeral ? MessageFlags.Ephemeral : undefined;
+function ephemeralFlag(ephemeral?: boolean): number | undefined {
+  return ephemeral ? InteractionResponseFlags.EPHEMERAL : undefined;
 }
 
 /**
  * PING に対する PONG 応答ボディ(type 1)を生成する (Req 1.4)。
  */
 export function pong(): APIInteractionResponsePong {
-  return { type: InteractionResponseType.Pong };
+  return { type: InteractionResponseType.PONG };
 }
 
 /**
@@ -67,7 +72,7 @@ export function reply(
 ): APIInteractionResponseChannelMessageWithSource {
   const flags = ephemeralFlag(opts?.ephemeral);
   return {
-    type: InteractionResponseType.ChannelMessageWithSource,
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: flags === undefined ? { content } : { content, flags },
   };
 }
@@ -84,7 +89,7 @@ export function deferred(
 ): APIInteractionResponseDeferredChannelMessageWithSource {
   const flags = ephemeralFlag(opts?.ephemeral);
   return {
-    type: InteractionResponseType.DeferredChannelMessageWithSource,
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
     data: flags === undefined ? {} : { flags },
   };
 }
@@ -97,7 +102,7 @@ export function deferred(
  */
 export function modal(input: ModalInput): APIModalInteractionResponse {
   return {
-    type: InteractionResponseType.Modal,
+    type: InteractionResponseType.MODAL,
     data: {
       custom_id: input.customId,
       title: input.title,

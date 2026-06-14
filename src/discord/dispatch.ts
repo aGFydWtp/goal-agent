@@ -1,7 +1,6 @@
-import {
-  type APIInteraction,
-  InteractionType,
-} from "discord-api-types/v10";
+import { InteractionType } from "discord-interactions";
+
+import type { APIInteraction } from "discord-api-types/v10";
 
 import type { DiscordEnv } from "./env";
 import { createFollowup } from "./followup";
@@ -31,14 +30,21 @@ import type { InteractionContext, InteractionKind } from "./types";
  * 不変条件: 初期応答は 3 秒以内に返る(重い処理は waitUntil 側 / design Invariant)。
  */
 
-/** Discord interaction type → ローカル {@link InteractionKind} の対応 (Req 3.1-3.3)。 */
-function kindOf(type: InteractionType): InteractionKind | null {
+/**
+ * Discord interaction type → ローカル {@link InteractionKind} の対応 (Req 3.1-3.3)。
+ *
+ * `type` は interaction payload の数値(type 2/3/5)。比較に用いる
+ * {@link InteractionType} は本番 workerd 上で値が正しく解決される `discord-interactions`
+ * の runtime enum(`APPLICATION_COMMAND=2` 等)。`discord-api-types` の enum 値は
+ * workerd バンドル上で undefined に解決される既知の不具合があるため使わない。
+ */
+function kindOf(type: number): InteractionKind | null {
   switch (type) {
-    case InteractionType.ApplicationCommand:
+    case InteractionType.APPLICATION_COMMAND:
       return "command";
-    case InteractionType.MessageComponent:
+    case InteractionType.MESSAGE_COMPONENT:
       return "component";
-    case InteractionType.ModalSubmit:
+    case InteractionType.MODAL_SUBMIT:
       return "modal";
     default:
       // PING(検証済み非 PING 前提のため到達しない)・autocomplete 等は非対象。

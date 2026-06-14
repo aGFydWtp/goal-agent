@@ -91,7 +91,7 @@
   - _Depends: 3.3_
 
 - [ ] 4. Integration: Worker エントリーへの統合
-- [ ] 4.1 interactions パスを Worker エントリーへ統合
+- [x] 4.1 interactions パスを Worker エントリーへ統合
   - infra-foundation の Worker エントリーに interactions パスを追加し、raw body を一度だけ取得→署名検証→PING なら PONG、非 PING はディスパッチャへ委譲する
   - 既存の Agent 配線・ルーティングは変更しない
   - 完了状態: interactions POST が検証→PING/PONG または種別ディスパッチへ流れ、署名不正で 401 を返す動作が疎通する
@@ -124,3 +124,4 @@
 - discord-api-types@0.38.48 では modal action row 子要素の v10 エクスポートは `APIComponentInModalActionRow`(design L287 の `APIModalActionRowComponent` は v8 のみで v10 に存在しない)。modal payload 型を扱う後続タスク(2.2 response, 3.2 dispatch)は v10 名を使うこと。`discord-interactions` は `dependencies`、`discord-api-types` は型のみで `devDependencies`。
 - 新規テストは `vitest.config.ts` の `node`/`workers` プロジェクト `include` 配列へ登録必須。`node` プロジェクトのテストは `tsconfig.test.json` の `include` にも追加が必要(型チェック対象に含めるため)。Workers ランタイム/ExecutionContext/DO を要するテストは `workers` プロジェクト。
 - infra-foundation の `test/boundary.test.ts` は当初 `src/` 全体から Discord パターン(verifyKey/Ed25519/InteractionType 等)と discord-interactions/discord-api-types 依存を禁止していたが、discord-gateway design と衝突するため基盤自レイヤ限定に再スコープ済み(commit 1313b7e、ユーザー承認)。`src/discord/` と統合点 `src/index.ts` は対象外。よって task 3.2(InteractionType 利用)・4.1(index.ts への interactions 統合)は boundary 検査に抵触しない。
+- **【P0・必読】discord-api-types/v10 の enum「値」(InteractionType.*/InteractionResponseType.*/MessageFlags.*)は本番 workerd ランタイム(@cloudflare/vitest-pool-workers)上で `undefined` に解決され実行時 TypeError を起こす(CJS __exportStar 再エクスポートの interop 問題)。node プロジェクトのテストでは CJS interop で動くため見逃される。応答 type 値・interaction type 判定・ephemeral flag 等の**実行時 enum 値は必ず `discord-interactions`(workerd で正しく解決。verify.ts/index.ts/response.ts/dispatch.ts が使用)から取る**こと(InteractionResponseType.PONG/CHANNEL_MESSAGE_WITH_SOURCE/DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE/MODAL、InteractionType.PING/APPLICATION_COMMAND/MESSAGE_COMPONENT/MODAL_SUBMIT、InteractionResponseFlags.EPHEMERAL=64)。`discord-api-types` は**型のみ**使用(design §Technology Stack と一致)。task 4.1 で response.ts/dispatch.ts を是正済み。**Discord ランタイム挙動を伴うテストは workers プロジェクトで実行すること**(node のみだと workerd 不具合を見逃す)。
