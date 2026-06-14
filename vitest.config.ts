@@ -62,6 +62,8 @@ export default defineConfig({
             "test/goal-management-delete-evidence.test.ts",
             // /cycle create ハンドラ(goal-management task 3.1)。routing をモックして DO 無しで検証する。
             "test/goal-management-cycle-create-handler.test.ts",
+            // /goal add ハンドラ(goal-management task 3.2)。modal 提示 payload を DO 無しで構造検証する。
+            "test/goal-management-goal-add-handler.test.ts",
           ],
         },
       },

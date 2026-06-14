@@ -61,7 +61,7 @@
   - _Boundary: Cycle Create Handler_
   - _Depends: 1.1, 2.1_
 
-- [ ] 3.2 (P) `/goal add` ハンドラ(modal 提示)を実装
+- [x] 3.2 (P) `/goal add` ハンドラ(modal 提示)を実装
   - `/goal add` コマンドに対し、目標名・本文・達成条件・評価観点・期限のフィールドを持つ modal を開く応答を返す
   - 完了状態: `/goal add` 実行で定義済み custom_id を持つ目標入力 modal 応答が返ることを確認できる
   - _Requirements: 2.1_
