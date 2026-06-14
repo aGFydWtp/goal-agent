@@ -76,7 +76,7 @@
   - _Boundary: Goal Add / Modal Submit Handlers_
   - _Depends: 1.1, 2.2, 2.3, 3.2_
 
-- [ ] 3.4 (P) `/evidence delete` ハンドラを実装
+- [x] 3.4 (P) `/evidence delete` ハンドラを実装
   - InteractionContext から実行ユーザー・証跡 ID を取り、証跡削除ドメイン呼び出し→結果整形を行う
   - 不存在・非所有は「見つからない」ephemeral 応答(露出しない)、成功時は削除完了の ephemeral 応答を返す
   - 完了状態: 所有証跡の削除で ephemeral 削除完了応答、不存在/非所有で「見つからない」ephemeral 応答が返ることを確認できる

@@ -66,6 +66,8 @@ export default defineConfig({
             "test/goal-management-goal-add-handler.test.ts",
             // goal modal submit ハンドラ(goal-management task 3.3)。必須検証→保存→GoalAgent 確立を DO 無しで検証する。
             "test/goal-management-goal-modal-submit-handler.test.ts",
+            // /evidence delete ハンドラ(goal-management task 3.4)。routing をモックし実 SQLite authority で DO 無しに検証する。
+            "test/goal-management-evidence-delete-handler.test.ts",
           ],
         },
       },
