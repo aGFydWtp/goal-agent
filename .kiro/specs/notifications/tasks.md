@@ -24,7 +24,7 @@
   - _Requirements: 4.7_
   - _Boundary: Alert Triggers + Dedup_
 
-- [ ] 2.2 (P) §9.3 トリガ評価ロジックを実装する
+- [x] 2.2 (P) §9.3 トリガ評価ロジックを実装する
   - 保持中の直近状態と新判定状態を比較し Green→Yellow / Yellow→Red の悪化遷移を検出する
   - 証跡なし2週間継続、半期終了30日前、14日前のトリガを評価し、成立したトリガと理由行を返す
   - 直近状態が未保持(初回)の場合は悪化遷移を成立させない
@@ -108,3 +108,11 @@
   - `/checkin` 会話処理・Google Calendar 連携・`/prepare 1on1` を実装していないことを確認する
   - 完了条件: 判定・配信・基盤が上流契約経由で呼ばれ、本スペックに重複実装・将来枠機能が含まれないことを確認するテストが通る
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
+
+## Implementation Notes
+- 共有依存契約(調査済み): 判定再利用は `src/status-and-draft/domain/status-operations.ts` の純関数 `determineAllStatuses(authority, deps, llm, userId)` / `determineGoalStatus(...)`(`StatusVerdict`/`DetermineAllStatusesResult` を返す)を消費する。配信は `src/discord/proactive.ts` `sendDirectMessage(env, userId, content, fallbackChannelId?)`(`SendResult`)。基盤は `getCycleAgent`/`getUserCycleAuthority`(`src/goal-management/routing.ts`, `PRIMARY_CYCLE_KEY="primary"`)・`createRepository`/`SqlLike`(`src/persistence`)・`createLlmClient(env)`(`src/llm/factory.ts`)・`Env`/`DiscordEnv`。フォールバックチャンネルは `DiscordEnv.DISCORD_FALLBACK_CHANNEL_ID?`(`src/discord/env.ts`)。
+- 確立パターン: ドメインは `src/agents/*.ts` を変更せず純関数で実装し、Agent の汎用 passthrough(`CycleDataAuthority`)/`SqlLike` を引数注入する。`boundary.test.ts` が Agent へのドメインメソッド追加(色リテラル/判定名等)を機械検査で禁止。
+- notifications 所有テーブル(`last_goal_status`/`alert_sent_log`)は infra `Repository`/`EntityRow`(§11 限定)に無いため、`alert-state.ts` は `SqlLike` へ直接アクセスする同期ストア(`createAlertStateStore(sql, deps)`)とした。
+- マイグレーションは infra の `runMigrations(sql, migrations)` ランナーを再利用し、notifications は独立 version(1000+)で共有 `schema_migrations` 台帳上に共存。
+- スケジュール: agents SDK の `this.schedule(cronExpr, callbackMethodName)` はクーロン既定で冪等。コールバックは Agent の `keyof this` メソッド名。タスク5.1/6.3 は `EvaluationCycleAgent` への最小配線(`onStart` でのスケジュール登録 + 委譲コールバックメソッド)が必須(設計の Modified Files と一致)。ドメインロジックは notifications モジュールの純関数に保ち boundary.test を満たす。金曜16:30 cron = `30 16 * * 5`。
+- トリガ判断(裁定済み): `no_evidence_2w` は `latestEvidenceAgeDays !== null && >= 14` のみ成立(年齢ベース)。証跡0件(null)は成立させない(設計 L383/L401 の null=証跡なし意味、タスク6.2「証跡経過2週超」記述に準拠)。期限トリガは `<=30`/`<=14` で評価し、サイクル内重複抑止は dedup(2.3)が担う。
