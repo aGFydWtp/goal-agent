@@ -26,6 +26,8 @@ export default defineConfig({
             "test/boundary.test.ts",
             // Ed25519 署名検証(task 2.1)。discord-interactions verifyKey の純粋ロジック。
             "test/discord-verify.test.ts",
+            // 応答ユーティリティ(task 2.2)。応答ボディ生成の純粋ロジック。
+            "test/discord-response.test.ts",
           ],
         },
       },

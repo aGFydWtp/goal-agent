@@ -26,7 +26,7 @@
   - _Boundary: Signature Verify_
   - _Depends: 1.1_
 
-- [ ] 2.2 (P) 応答ユーティリティを実装
+- [x] 2.2 (P) 応答ユーティリティを実装
   - PING に対する PONG(type1)、即時応答(type4)、deferred 応答(type5)、modal を開く応答(type9)、ephemeral フラグ付与の応答ボディ生成を実装する
   - modal 応答は custom_id・title・components(action row 内の text input)を Discord modal payload に整形する
   - 完了状態: PONG/type4/type5/type9 の各ボディが生成され、type9 が customId/title/text input を含む payload を生成し、ephemeral 指定でフラグ(64)が立つことをユニットテストで確認できる

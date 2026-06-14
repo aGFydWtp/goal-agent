@@ -25,6 +25,7 @@
     "test/agent-ids.test.ts",
     "test/boundary.test.ts",
     "test/discord-verify.test.ts",
+    "test/discord-response.test.ts",
     "test/helpers/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", ".wrangler"]
