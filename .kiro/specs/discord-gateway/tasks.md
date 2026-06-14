@@ -66,7 +66,7 @@
   - _Boundary: Handler Registry_
   - _Depends: 1.2_
 
-- [ ] 3.2 interaction ディスパッチャを実装
+- [x] 3.2 interaction ディスパッチャを実装
   - 検証済み非 PING interaction を種別判定し文脈を構築、レジストリ照合してハンドラを実行する
   - deferred 宣言ハンドラは type5 を即返し、重い処理を初期応答後も継続実行(waitUntil)し follow-up で本応答を送る配線にする。即時応答ハンドラは type4 を返す。modal 宣言ハンドラは type9(MODAL)を初期応答として返す配線にする
   - 未登録ハンドラ時は判別可能なエラー応答を返す

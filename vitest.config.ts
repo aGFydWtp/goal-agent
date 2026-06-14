@@ -36,6 +36,8 @@ export default defineConfig({
             "test/discord-proactive.test.ts",
             // ハンドラレジストリ(task 3.1)。(kind,name)→handler のマップ規約の純粋ロジック。
             "test/discord-registry.test.ts",
+            // interaction ディスパッチャ(task 3.2)。fake ctx + fetch モックで純粋に検証する。
+            "test/discord-dispatch.test.ts",
           ],
         },
       },
