@@ -85,7 +85,7 @@
   - _Requirements: 3.1, 3.5_
   - _Depends: 4.2_
 
-- [ ] 4.4 Agent 取得ルーティングヘルパーを実装する
+- [x] 4.4 Agent 取得ルーティングヘルパーを実装する
   - userId/cycleId から EvaluationCycleAgent を、userId/cycleId/goalId から GoalAgent を取得するヘルパーを実装する
   - 完了条件: 同一引数の取得要求が同一論理 Agent インスタンスに解決し、取得後に対象 Agent が利用可能になる
   - _Requirements: 3.3, 3.4, 3.6_
