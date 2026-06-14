@@ -18,7 +18,7 @@
   - _Depends: 1.1_
 
 - [ ] 2. Core: 検証・応答・REST・送信ヘルパー
-- [ ] 2.1 (P) Ed25519 署名検証を実装
+- [x] 2.1 (P) Ed25519 署名検証を実装
   - raw body と署名ヘッダ(signature/timestamp)を公開鍵で Ed25519 検証する処理を実装する
   - ヘッダ欠落と検証失敗を判別可能な結果として返す(成功時はパース済み interaction を返す)
   - 完了状態: 正しい署名で検証成功、改竄署名で `invalid_signature`、ヘッダ欠落で `missing_headers` を返すユニットテストが通る
@@ -123,3 +123,4 @@
 ## Implementation Notes
 - discord-api-types@0.38.48 では modal action row 子要素の v10 エクスポートは `APIComponentInModalActionRow`(design L287 の `APIModalActionRowComponent` は v8 のみで v10 に存在しない)。modal payload 型を扱う後続タスク(2.2 response, 3.2 dispatch)は v10 名を使うこと。`discord-interactions` は `dependencies`、`discord-api-types` は型のみで `devDependencies`。
 - 新規テストは `vitest.config.ts` の `node`/`workers` プロジェクト `include` 配列へ登録必須。`node` プロジェクトのテストは `tsconfig.test.json` の `include` にも追加が必要(型チェック対象に含めるため)。Workers ランタイム/ExecutionContext/DO を要するテストは `workers` プロジェクト。
+- infra-foundation の `test/boundary.test.ts` は当初 `src/` 全体から Discord パターン(verifyKey/Ed25519/InteractionType 等)と discord-interactions/discord-api-types 依存を禁止していたが、discord-gateway design と衝突するため基盤自レイヤ限定に再スコープ済み(commit 1313b7e、ユーザー承認)。`src/discord/` と統合点 `src/index.ts` は対象外。よって task 3.2(InteractionType 利用)・4.1(index.ts への interactions 統合)は boundary 検査に抵触しない。

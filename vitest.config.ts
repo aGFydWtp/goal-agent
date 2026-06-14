@@ -24,6 +24,8 @@ export default defineConfig({
             "test/agent-ids.test.ts",
             // 境界整合の機械的検証(task 6.4)。node:fs でソースを静的検査するため node プロジェクト。
             "test/boundary.test.ts",
+            // Ed25519 署名検証(task 2.1)。discord-interactions verifyKey の純粋ロジック。
+            "test/discord-verify.test.ts",
           ],
         },
       },
