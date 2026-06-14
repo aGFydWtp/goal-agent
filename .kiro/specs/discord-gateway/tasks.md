@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. Foundation: Discord 依存・環境設定・型基盤
-- [ ] 1.1 Discord ライブラリ依存と Env 拡張を整備
+- [x] 1.1 Discord ライブラリ依存と Env 拡張を整備
   - `discord-interactions` と `discord-api-types` をプロジェクト依存に追加する(full `discord.js` は追加しない)
   - infra-foundation の `Env` を拡張し、`DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` / `DISCORD_BOT_TOKEN` と任意の個人用フォールバックチャンネル設定を型として宣言する
   - 完了状態: 型チェックが通り、Discord secrets が型レベルで参照可能(欠落を型/起動時に検出できる)になっている
