@@ -252,3 +252,41 @@ export async function getGoal(
   }
   return owned;
 }
+
+/** `deleteEvidence` の結果型(design Service Interface)。所有者不一致も `not_found` に正規化する。 */
+export type DeleteEvidenceResult = { ok: true } | { ok: false; reason: "not_found" };
+
+/**
+ * 指定証跡を所有者スコープ内で削除する(Req 3.1, 3.2, 3.3, 3.4, 5.3, 5.4)。
+ *
+ * 取得行を `assertOwned` で所有者検証し、不一致/不存在のいずれも `null`(不存在扱い)へ
+ * 正規化して `{ ok: false, reason: "not_found" }` を返す(Req 3.3, 3.4。他ユーザーデータの
+ * 存在を露出しない)。所有一致時は当該証跡に紐づく `evidence_goal_links` を連動削除して
+ * 孤立参照を残さず(Req 3.2)、証跡本体を削除する(Req 3.1)。書き込みは単一権威へ反映し
+ * (Req 5.3)、スキーマ・型は再定義せず共有型を使う(Req 5.4)。
+ *
+ * 注: 削除のみのため ID / timestamp 生成(`DomainDeps`)は不要で、引数は (authority, userId, evidenceId)。
+ *
+ * @param authority サイクルデータ権威(getById / list / remove を消費)。
+ * @param userId 実行ユーザー(= 所有者)識別子。
+ * @param evidenceId 削除対象の証跡識別子。
+ * @returns 所有証跡を削除できた場合は `{ ok: true }`、不存在/非所有は `{ ok: false, reason: "not_found" }`。
+ */
+export async function deleteEvidence(
+  authority: CycleDataAuthority,
+  userId: string,
+  evidenceId: string,
+): Promise<DeleteEvidenceResult> {
+  const row = await authority.getRowById("evidence", evidenceId);
+  const owned = assertOwned<"evidence">(row, userId);
+  if (owned === null) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const links = await authority.listRowsBy("evidence_goal_links", { evidence_id: evidenceId });
+  for (const link of links) {
+    await authority.removeRow("evidence_goal_links", link.id);
+  }
+  await authority.removeRow("evidence", evidenceId);
+  return { ok: true };
+}

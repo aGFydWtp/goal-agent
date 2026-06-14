@@ -45,7 +45,7 @@
   - _Boundary: Cycle Domain Operations, Goal Domain Operations_
   - _Depends: 1.2, 2.2_
 
-- [ ] 2.4 証跡削除ドメインロジックを実装(EvaluationCycleAgent メソッド)
+- [x] 2.4 証跡削除ドメインロジックを実装(EvaluationCycleAgent メソッド)
   - 指定証跡の所有者一致を検証し、不一致・不存在を `not_found` に正規化したうえで、紐づく証跡-目標リンクを連動削除してから証跡本体を削除する処理を実装する
   - 完了状態: 所有証跡が evidence_goal_links ごと削除され、不存在・非所有でいずれも `not_found` を返す(露出しない)ユニットテストが通る
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 5.3, 5.4_

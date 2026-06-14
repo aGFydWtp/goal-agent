@@ -58,6 +58,8 @@ export default defineConfig({
             "test/goal-management-add-goal.test.ts",
             // 目標一覧/取得ドメインロジック(goal-management task 2.3)。所有者/サイクルスコープと親委譲を検証する。
             "test/goal-management-goal-read.test.ts",
+            // 証跡削除ドメインロジック(goal-management task 2.4)。所有者検証・リンク連動削除・not_found 正規化を検証する。
+            "test/goal-management-delete-evidence.test.ts",
           ],
         },
       },
