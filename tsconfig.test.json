@@ -31,6 +31,7 @@
     "test/discord-proactive.test.ts",
     "test/discord-registry.test.ts",
     "test/discord-dispatch.test.ts",
+    "test/discord-command-definitions.test.ts",
     "test/helpers/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", ".wrangler"]
