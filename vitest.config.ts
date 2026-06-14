@@ -42,6 +42,8 @@ export default defineConfig({
             "test/discord-command-definitions.test.ts",
             // コマンド登録スクリプト(task 3.4)。fetch モックで bulk overwrite を純粋に検証する。
             "test/discord-command-register.test.ts",
+            // コマンド登録スモーク(task 5.2)。集約点 → register の end-to-end を fetch モックで疎通確認する。
+            "test/discord-register-smoke.test.ts",
           ],
         },
       },
@@ -68,6 +70,8 @@ export default defineConfig({
             "test/discord-worker-interactions.test.ts",
             // 検証〜ディスパッチ統合(task 5.1)。署名込み worker.fetch 経路 + 実 waitUntil 継続を workers で検証する。
             "test/discord-dispatch-integration.test.ts",
+            // PING スモーク(task 5.2)。署名付き PING → PONG をエンドポイント登録検証相当として workers で疎通確認する。
+            "test/discord-ping-smoke.test.ts",
             "test/integration.test.ts",
           ],
         },
