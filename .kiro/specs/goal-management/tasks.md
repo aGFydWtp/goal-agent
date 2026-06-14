@@ -94,7 +94,7 @@
   - _Depends: 3.1, 3.2, 3.3, 3.4_
 
 - [ ] 5. Validation: 統合テストと境界検証
-- [ ] 5.1 サイクル/目標登録の統合テスト
+- [x] 5.1 サイクル/目標登録の統合テスト
   - `/cycle create` で EvaluationCycleAgent が確立されサイクルが永続化され ephemeral 確認応答が返ること、`/goal add`→modal submit で目標が対象サイクルに保存され GoalAgent が確立されることを検証する
   - `/cycle create`→複数 `/goal add`→目標一覧取得で登録目標が単一権威に揃うことを検証する
   - 完了状態: 上記サイクル作成・目標登録・一覧取得の統合テストが通る

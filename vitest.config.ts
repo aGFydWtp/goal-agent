@@ -70,6 +70,8 @@ export default defineConfig({
             "test/goal-management-evidence-delete-handler.test.ts",
             // ハンドラ登録とコマンド定義集約(goal-management task 4.1)。registry/definitions の reset → register を純粋に検証する。
             "test/goal-management-register.test.ts",
+            // サイクル/目標登録の統合テスト(goal-management task 5.1)。routing をモックし単一の実 SQLite 権威を共有させ、cycle-create → goal-add → modal submit → 目標一覧の連結を検証する。
+            "test/goal-management-cycle-goal-integration.test.ts",
           ],
         },
       },
