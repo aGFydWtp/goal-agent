@@ -32,6 +32,8 @@ export default defineConfig({
             "test/discord-rest.test.ts",
             // follow-up 送信ユーティリティ(task 2.4)。fetch モックで純粋に検証する。
             "test/discord-followup.test.ts",
+            // プロアクティブ送信ヘルパー(task 2.5)。fetch モックで純粋に検証する。
+            "test/discord-proactive.test.ts",
           ],
         },
       },
