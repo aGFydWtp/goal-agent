@@ -8,7 +8,7 @@
   - _Requirements: 1.5, 2.2, 5.4, 6.3_
   - _Boundary: Discord Env 拡張_
 
-- [ ] 1.2 interaction 文脈とハンドラ登録規約の型を定義
+- [x] 1.2 interaction 文脈とハンドラ登録規約の型を定義
   - 実行ユーザー ID・コマンド名/custom_id・引数・チャンネル/DM 文脈・follow-up token を含む interaction 文脈型を定義する
   - ハンドラが「即時応答型(reply)」「deferred 型」「modal を開く型(modal: customId/title/components)」を宣言できる結果型と、ハンドラインターフェイスを定義する
   - modal の components は Discord modal payload(action row 内の text input)に準拠した型とする
@@ -119,3 +119,7 @@
   - 完了状態: DM 成功・403 フォールバック・fallback 無し失敗の各パスと、公開チャンネル送信経路が公開されていないことを確認するテストが通る
   - _Requirements: 5.1, 5.2, 5.3, 5.5, 6.3, 6.4_
   - _Depends: 2.5_
+
+## Implementation Notes
+- discord-api-types@0.38.48 では modal action row 子要素の v10 エクスポートは `APIComponentInModalActionRow`(design L287 の `APIModalActionRowComponent` は v8 のみで v10 に存在しない)。modal payload 型を扱う後続タスク(2.2 response, 3.2 dispatch)は v10 名を使うこと。`discord-interactions` は `dependencies`、`discord-api-types` は型のみで `devDependencies`。
+- 新規テストは `vitest.config.ts` の `node`/`workers` プロジェクト `include` 配列へ登録必須。`node` プロジェクトのテストは `tsconfig.test.json` の `include` にも追加が必要(型チェック対象に含めるため)。Workers ランタイム/ExecutionContext/DO を要するテストは `workers` プロジェクト。
