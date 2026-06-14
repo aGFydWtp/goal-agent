@@ -164,6 +164,6 @@ describe("registerCommands: REST 失敗の正規化", () => {
       sampleDefinition("cycle"),
     ]);
 
-    expect(result).toEqual({ ok: false, reason: "rest_error", status: 500 });
+    expect(result).toEqual({ ok: false, reason: "rest_error", status: 500, body: "{}" });
   });
 });
