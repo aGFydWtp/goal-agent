@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Foundation: 横断ヘルパーとコマンド定義の整備
+- [x] 1. Foundation: 横断ヘルパーとコマンド定義の整備
 - [x] 1.1 入力検証ヘルパーを実装
   - サイクルの開始日/終了日の日付パースと期間整合(終了が開始より前でないこと)を検証する処理を実装する
   - 目標の必須項目(目標名・目標本文)の有無を検証し、不足項目を判別可能に返す処理を実装する
@@ -22,7 +22,7 @@
   - _Boundary: Command Definitions + Register_
   - _Depends: 1.1_
 
-- [ ] 2. Core: ドメイン CRUD ビジネスロジック
+- [x] 2. Core: ドメイン CRUD ビジネスロジック
 - [x] 2.1 サイクル作成ドメインロジックを実装(EvaluationCycleAgent メソッド)
   - 実行ユーザーを所有者として付与し、同一ユーザー内の同名サイクル重複を検出してから Repository へ永続化する処理を、EvaluationCycleAgent の骨格メソッドの実体として実装する
   - 完了状態: 重複なしで `evaluation_cycles` 行が user_id 付きで insert され、同名重複で `duplicate` を返すユニットテストが通る
@@ -52,7 +52,7 @@
   - _Boundary: Cycle Domain Operations_
   - _Depends: 1.2_
 
-- [ ] 3. Core: コマンド/modal/button ハンドラ
+- [x] 3. Core: コマンド/modal/button ハンドラ
 - [x] 3.1 `/cycle create` ハンドラを実装
   - InteractionContext から実行ユーザー・name/start/end を取り、期間検証→サイクル作成ドメイン呼び出し→結果整形を行う
   - 検証 NG・重複時は ephemeral エラー応答、成功時はサイクル名と期間を含む ephemeral 確認応答を返す
@@ -84,7 +84,7 @@
   - _Boundary: Evidence Delete Handler_
   - _Depends: 2.4_
 
-- [ ] 4. Integration: ハンドラ登録とコマンド定義集約
+- [x] 4. Integration: ハンドラ登録とコマンド定義集約
 - [x] 4.1 ハンドラ登録とコマンド定義を discord-gateway へ統合
   - cycle create / goal add(command)・goal modal(modal)・evidence delete(command)の各ハンドラを discord-gateway のレジストリへ識別子(コマンド名/custom_id)で登録する
   - goal-management のコマンド定義を discord-gateway のコマンド定義集約点へ追加する(ゲートウェイの登録機構は変更しない)
@@ -93,7 +93,7 @@
   - _Boundary: Command Definitions + Register, Cycle Create Handler, Goal Add / Modal Submit Handlers, Evidence Delete Handler_
   - _Depends: 3.1, 3.2, 3.3, 3.4_
 
-- [ ] 5. Validation: 統合テストと境界検証
+- [x] 5. Validation: 統合テストと境界検証
 - [x] 5.1 サイクル/目標登録の統合テスト
   - `/cycle create` で EvaluationCycleAgent が確立されサイクルが永続化され ephemeral 確認応答が返ること、`/goal add`→modal submit で目標が対象サイクルに保存され GoalAgent が確立されることを検証する
   - `/cycle create`→複数 `/goal add`→目標一覧取得で登録目標が単一権威に揃うことを検証する
