@@ -3,7 +3,7 @@
 > 依存方向: `commands.ts`・`custom-ids.ts` → `register.ts` → `handlers/*` → `domain/checkin-operations.ts` → infra `Repository`/`LlmClient` & goal-management `listGoals/getGoal`。`classification/*`・`weekly-review/*`・`messages.ts` は domain から参照される横断ヘルパー。上流(infra-foundation / discord-gateway / goal-management)の公開契約は再定義せず消費する。
 
 - [ ] 1. Foundation: コマンド定義・custom_id 規約・横断ヘルパーの確立
-- [ ] 1.1 `/checkin` コマンド定義と custom_id 規約を定義する
+- [x] 1.1 `/checkin` コマンド定義と custom_id 規約を定義する
   - `/checkin` の application command 定義(引数なし)を作成する
   - checkin modal の custom_id(`CHECKIN_MODAL_ID`)、[入力する]/[保存]/[修正]/[破棄] ボタンの custom_id 規約を定義し、保存/修正/破棄ボタンには pending 識別子を埋め込む/抽出するユーティリティを用意する
   - 完了状態: コマンド定義オブジェクトと custom_id の組立・分解関数が型付きで提供され、pendingId の往復(埋め込み→抽出)が一致する
