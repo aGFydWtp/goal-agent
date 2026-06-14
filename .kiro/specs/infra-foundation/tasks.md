@@ -109,7 +109,7 @@
   - _Boundary: Persistence Schema + Migrator, Repository_
   - _Depends: 2.3_
 
-- [ ] 6.2 (P) ID 規約と LLM クライアントのユニットテスト
+- [x] 6.2 (P) ID 規約と LLM クライアントのユニットテスト
   - ID の組立/分解の往復一致と不正入力時の null を検証する
   - LLM クライアントの構造化出力パース失敗が invalid_output として返ることを検証する
   - 完了条件: ID ユーティリティと LLM エラー処理のテストが通る

@@ -73,7 +73,7 @@ describe("WorkersAiLlmClient.completeJson (Req 4.2, 4.5, design completeJson con
     }
   });
 
-  it("JSON パース失敗時は invalid_output を返す", async () => {
+  it("JSON パース失敗時は invalid_output を返し cause に SyntaxError を載せる", async () => {
     const ai = makeAi(async () => ({ response: "not json{" }));
     const client = new WorkersAiLlmClient(ai, MODEL);
 
@@ -82,7 +82,41 @@ describe("WorkersAiLlmClient.completeJson (Req 4.2, 4.5, design completeJson con
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
     expect(result.error.kind).toBe("invalid_output");
-    expect(result.error.cause).toBeDefined();
+    // JSON.parse 由来の診断情報(SyntaxError)が cause に伝播していること。
+    expect(result.error.cause).toBeInstanceOf(SyntaxError);
+  });
+
+  // 構造化出力のパース失敗(invalid_output)の網羅。
+  // 応答テキストが JSON にならない各種ケース(空 / 空白のみ / 途中で切れた JSON)を
+  // いずれも invalid_output として表面化させること。
+  it.each([
+    ["空文字列", ""],
+    ["空白のみ", "   \n  "],
+    ["途中で切れた JSON", '{"score":0.8,'],
+    ["閉じられていない配列", "[1, 2"],
+  ])("不正な応答 (%s) は invalid_output を返す", async (_label, response) => {
+    const ai = makeAi(async () => ({ response }));
+    const client = new WorkersAiLlmClient(ai, MODEL);
+
+    const result = await client.completeJson({ prompt: "p" }, schema);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure");
+    expect(result.error.kind).toBe("invalid_output");
+    expect(result.error.cause).toBeInstanceOf(SyntaxError);
+  });
+
+  // response フィールド欠落時も runText が "" にフォールバックし、
+  // 結果として JSON パース失敗 → invalid_output になること。
+  it("AI 応答に response が欠落する場合も invalid_output を返す", async () => {
+    const ai = makeAi(async () => ({}));
+    const client = new WorkersAiLlmClient(ai, MODEL);
+
+    const result = await client.completeJson({ prompt: "p" }, schema);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure");
+    expect(result.error.kind).toBe("invalid_output");
   });
 
   it("スキーマ不一致時は invalid_output を返し cause に zod issue を載せる", async () => {

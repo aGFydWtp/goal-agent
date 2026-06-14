@@ -61,15 +61,32 @@ describe("parseAgentName (round-trip)", () => {
       goalId: "ai-adoption",
     });
   });
+
+  // セグメント位置の取り違えがないことを強化検証する。
+  // 各セグメントに予約語(プレフィックス `evaluation` / マーカー `goal`)を
+  // 値として含ませても、組立 → 分解で正しい位置に復元されること。
+  it("予約語を値に含む goal 名でも位置を取り違えず往復一致する", () => {
+    const name = goalAgentName("goal", "evaluation", "evaluation");
+    expect(name).toBe("evaluation:goal:evaluation:goal:evaluation");
+    expect(parseAgentName(name)).toEqual({
+      kind: "goal",
+      userId: "goal",
+      cycleId: "evaluation",
+      goalId: "evaluation",
+    });
+  });
 });
 
 describe("parseAgentName (不正入力 → null)", () => {
   it.each([
     ["空文字列", ""],
     ["プレフィックス不正", "foo:a:b"],
+    ["プレフィックスのみ", "evaluation"],
     ["セグメント不足", "evaluation:a"],
+    ["不正アリティ(4 セグメント)", "evaluation:a:b:goal"],
     ["セグメント過多/不正アリティ", "evaluation:a:b:c:d:e"],
     ["goal マーカーが goal でない", "evaluation:a:b:notgoal:d"],
+    ["空セグメント(先頭)", ":a:b"],
     ["空セグメント(中間)", "evaluation::b"],
     ["空セグメント(末尾)", "evaluation:a:"],
   ])("%s → null", (_label, input) => {
