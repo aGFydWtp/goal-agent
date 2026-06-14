@@ -44,6 +44,7 @@ export default defineConfig({
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",
+            "test/integration.test.ts",
           ],
         },
       },
