@@ -7,6 +7,7 @@
 // 後続タスク(2.2/2.3/2.4)が同一の `CycleDataAuthority`/`DomainDeps` 基盤を拡張する。
 
 import type { EntityName, EntityRow, EvaluationCycleRow, GoalRow } from "../../types";
+import { assertOwned } from "../ownership";
 
 /**
  * ドメイン関数が消費する最小の async データ権威インターフェイス。
@@ -204,4 +205,50 @@ export async function addGoal(
   };
   await authority.insertRow("goals", goal);
   return { ok: true, goal };
+}
+
+/**
+ * 指定サイクルに属する目標定義の一覧を所有者スコープ内で取得する(Req 5.1, 5.3)。
+ *
+ * 所有者スコープは `user_id` クエリで担保し(他ユーザーの目標は対象外)、`cycle_id` で
+ * 対象サイクルに限定する(他サイクルの目標は対象外)。該当が無ければ空配列を返す。
+ *
+ * @param authority サイクルデータ権威(list を消費)。
+ * @param userId 実行ユーザー(= 所有者)識別子。
+ * @param cycleId 対象サイクル識別子。
+ * @returns 所有者かつ同一サイクルの目標行の配列(0 件なら空配列)。
+ */
+export async function listGoals(
+  authority: CycleDataAuthority,
+  userId: string,
+  cycleId: string,
+): Promise<GoalRow[]> {
+  return authority.listRowsBy("goals", { cycle_id: cycleId, user_id: userId });
+}
+
+/**
+ * 特定目標の定義を所有者スコープ内で取得する(Req 5.2, 5.3, 2.3)。
+ *
+ * 取得行を `assertOwned` で所有者検証し(不一致/不存在は `null` = 不存在扱いで露出しない)、
+ * さらに `cycle_id` が対象サイクルと一致しない場合も `null` を返す(別サイクルの目標を露出しない)。
+ * 所有かつ同一サイクルの場合のみ行を返す。
+ *
+ * @param authority サイクルデータ権威(getById を消費)。
+ * @param userId 実行ユーザー(= 所有者)識別子。
+ * @param cycleId 対象サイクル識別子。
+ * @param goalId 取得対象の目標識別子。
+ * @returns 所有かつ同一サイクルの目標行。非所有/別サイクル/不存在は `null`。
+ */
+export async function getGoal(
+  authority: CycleDataAuthority,
+  userId: string,
+  cycleId: string,
+  goalId: string,
+): Promise<GoalRow | null> {
+  const row = await authority.getRowById("goals", goalId);
+  const owned = assertOwned<"goals">(row, userId);
+  if (owned === null || owned.cycle_id !== cycleId) {
+    return null;
+  }
+  return owned;
 }

@@ -56,6 +56,8 @@ export default defineConfig({
             "test/goal-management-cycle-operations.test.ts",
             // 目標登録ドメインロジック(goal-management task 2.2)。対象サイクル解決と goals insert を検証する。
             "test/goal-management-add-goal.test.ts",
+            // 目標一覧/取得ドメインロジック(goal-management task 2.3)。所有者/サイクルスコープと親委譲を検証する。
+            "test/goal-management-goal-read.test.ts",
           ],
         },
       },
