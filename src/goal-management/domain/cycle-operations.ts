@@ -141,9 +141,7 @@ export interface GoalInput {
 }
 
 /** `addGoal` の結果型(design Service Interface)。 */
-export type AddGoalResult =
-  | { ok: true; goal: GoalRow }
-  | { ok: false; reason: "no_cycle" };
+export type AddGoalResult = { ok: true; goal: GoalRow } | { ok: false; reason: "no_cycle" };
 
 /**
  * `dueDate` を `evaluationPoints` 末尾へ畳み込む(design L386 dueDate 永続化規約)。

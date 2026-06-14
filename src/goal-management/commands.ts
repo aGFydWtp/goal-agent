@@ -164,5 +164,8 @@ const evidenceCommand: RESTPostAPIApplicationCommandsJSONBody = {
  * `registerCommandDefinition`(`src/discord/commands/definitions.ts`)経由で集約点へ
  * 追加する。本モジュールは登録配線を行わず、定義の公開のみを所有する。
  */
-export const goalManagementCommandDefinitions: RESTPostAPIApplicationCommandsJSONBody[] =
-  [cycleCommand, goalCommand, evidenceCommand];
+export const goalManagementCommandDefinitions: RESTPostAPIApplicationCommandsJSONBody[] = [
+  cycleCommand,
+  goalCommand,
+  evidenceCommand,
+];
