@@ -67,7 +67,7 @@
   - _Boundary: Checkin Domain Operations_
   - _Depends: 1.3, 2.3_
 
-- [ ] 3. Core: `/checkin` ハンドラ群
+- [x] 3. Core: `/checkin` ハンドラ群
 - [x] 3.1 (P) `/checkin` コマンドハンドラと [入力する] ボタンハンドラを実装する
   - `/checkin` で対象サイクル有無を確認し、有りで促し文 + [入力する] ボタンを ephemeral 即時応答、無しでサイクル未作成案内を返し分類フローを開始しない
   - [入力する] ボタンで複数行 TextInput を持つ checkin modal を開く応答を返す
@@ -76,26 +76,26 @@
   - _Boundary: Checkin Command Handler, Input Button Handler_
   - _Depends: 1.1, 1.4, 2.1_
 
-- [ ] 3.2 (P) checkin modal submit ハンドラ(分類 = deferred)を実装する
+- [x] 3.2 (P) checkin modal submit ハンドラ(分類 = deferred)を実装する
   - 空入力ガードを通し、空なら ephemeral 通知。入力ありなら 3秒以内に deferred(ephemeral)応答を返し、分類を後処理で実行する
   - 分類成功で確認メッセージ(§14.1)と保存/修正/破棄ボタン(custom_id に pendingId)を follow-up し、失敗で再試行案内を follow-up する
   - 完了状態: 入力ありで type5 が即返され follow-up に確認メッセージ + 3 ボタンが届く、空入力で ephemeral 通知、分類失敗で再試行案内が届き証跡が作られないことを確認できる
   - _Requirements: 1.3, 1.4, 2.6, 2.7, 3.1, 3.2, 3.6_
   - _Boundary: Checkin Modal Submit Handler_
   - _Depends: 1.1, 1.4, 2.2_
-  - _Blocked: pending 分類はリクエスト跨ぎ(modal submit→[保存]/[破棄])で保持する必要があり DO 常駐状態が必須。設計フロー「Agent が pending を保持し handler が agent.classifyCheckin を呼ぶ」は infra-foundation 境界テスト(test/boundary.test.ts L169-193, Req 6.2: Agent にドメインメソッド `classifyCheckin`/`generate*Review` 等を追加禁止)と衝突する。汎用 ephemeral instance-state surface(例: callable `putEphemeral(key,value)`/`getEphemeral(key)`/`deleteEphemeral(key)`、per-instance Map、非永続)は基盤責務として infra-foundation で EvaluationCycleAgent に追加する必要がある。決定(2026-06-14): infra-foundation へ差し戻し、基盤契約が入るまで本タスクをブロック。詳細は ## Implementation Notes 参照。_
+  - _Unblocked (2026-06-14): infra-foundation task 4.5 が EvaluationCycleAgent に汎用揮発 KV(`@callable` `putEphemeral`/`getEphemeral`/`deleteEphemeral`、per-instance Map、非永続)を追加済み(Req 3.7-3.9)。pending 分類は不透明 JSON としてこの surface に保持し、ドメインロジックは worker 側(domain/checkin-operations.ts)に留める。`getEphemeral`→検証→`PendingCheckinStore` 互換 async ラッパで橋渡しする。Agent へドメインメソッドを足さないため boundary test(Req 6.2)に適合する。詳細は ## Implementation Notes 参照。_
 
-- [ ] 3.3 (P) 保存・修正・破棄ボタンハンドラを実装する
+- [x] 3.3 (P) 保存・修正・破棄ボタンハンドラを実装する
   - [保存] で証跡化ドメインメソッドを呼び、続けて週次レビュー生成を呼んで保存後メッセージ(§14.2)を ephemeral 応答する。pending 不在/別人で操作不可を通知。レビュー失敗時は保存完了 + レビュー失敗を通知
   - [破棄] で pending を破棄し破棄通知、[修正] で分類内容を編集できる modal を再提示する
   - 完了状態: [保存] で証跡 + 週次レビューが作られ §14.2 メッセージが ephemeral 表示、[破棄] で確定されず通知、[修正] で編集 modal 提示、不在/別人 pending で操作不可を確認できる
   - _Requirements: 3.3, 3.4, 3.5, 3.6, 3.7, 5.3, 5.4_
   - _Boundary: Save Edit Discard Button Handlers_
   - _Depends: 1.1, 1.4, 2.3, 2.4_
-  - _Blocked: [保存]/[破棄]/[修正] は pendingId で DO 常駐の pending 分類を引く前提のため、task 3.2 と同じ infra-foundation の汎用 ephemeral instance-state surface 契約が前提。決定(2026-06-14): infra-foundation へ差し戻し、基盤契約が入るまでブロック。詳細は ## Implementation Notes 参照。_
+  - _Unblocked (2026-06-14): task 3.2 と同じく infra-foundation task 4.5 の汎用揮発 KV 契約が満たされた。[保存]/[破棄]/[修正] は pendingId をキーに `getEphemeral`/`deleteEphemeral` で DO 常駐の pending 分類を引く/破棄する。詳細は ## Implementation Notes 参照。_
 
-- [ ] 4. Integration: ハンドラ登録とコマンド定義の配線
-- [ ] 4.1 ハンドラ登録とコマンド定義集約点への追加を実装する
+- [x] 4. Integration: ハンドラ登録とコマンド定義の配線
+- [x] 4.1 ハンドラ登録とコマンド定義集約点への追加を実装する
   - `/checkin` コマンド・[入力する]/[保存]/[修正]/[破棄] ボタン・checkin modal submit の各ハンドラを discord-gateway のレジストリへ規約適合で登録する
   - `/checkin` のコマンド定義を discord-gateway のコマンド定義集約点へ追加する(配列追加のみ、機構は変更しない)
   - EvaluationCycleAgent 骨格が宣言する分類/証跡化/週次レビュー/pending 保持の責務メソッドの中身を本スペックのドメイン実装で埋める(クラス宣言・onStart は変更しない)
@@ -103,36 +103,43 @@
   - _Requirements: 1.1, 6.4_
   - _Boundary: Command Definitions, Register, Checkin Domain Operations_
   - _Depends: 3.1, 3.2, 3.3_
-  - _Blocked: 依存する 3.2/3.3 が infra-foundation 契約待ちでブロック中。加えて design「EvaluationCycleAgent 骨格が宣言する分類/証跡化/週次レビュー/pending 保持の責務メソッドの中身を埋める」は boundary test(Req 6.2)と矛盾しており、agent には汎用 ephemeral surface のみ追加可。決定(2026-06-14): infra-foundation へ差し戻し。なお command 定義集約点への `/checkin` 追加と registerHandler 配線(本タスクの前半)は基盤契約とは独立に実施可能だが、handler(3.2/3.3)未完のため一括ブロックとする。詳細は ## Implementation Notes 参照。_
+  - _Unblocked (2026-06-14): 依存する 3.2/3.3 の前提だった infra-foundation 契約(task 4.5 汎用揮発 KV)が満たされた。なお design 記述「EvaluationCycleAgent 骨格が宣言する…責務メソッドの中身を埋める」は boundary test(Req 6.2)と矛盾するため**適用しない**。Agent にはドメインメソッドを追加せず、ドメインロジックは worker 側に置き、Agent の汎用 `putEphemeral`/`getEphemeral`/`deleteEphemeral` のみを pending 保持に使う。本タスクは command 定義集約点への `/checkin` 追加と registerHandler 配線(機構変更なし)を行う。詳細は ## Implementation Notes 参照。_
 
-- [ ] 5. Validation: 結合・E2E テスト
-- [ ] 5.1 分類フローの結合テストを実装する
+- [x] 5. Validation: 結合・E2E テスト
+- [x] 5.1 分類フローの結合テストを実装する
   - `/checkin` → [入力する] → modal → 分類(deferred)の経路で、サイクル有無分岐・空入力通知・分類成功時の確認メッセージ + 3 ボタン follow-up・分類失敗時の再試行案内(証跡非作成)を検証する
   - 未分類項目が確認メッセージに保持されることを検証する
   - 完了状態: 上記分岐がモック LLM/ゲートウェイで再現され、確認メッセージ・未分類保持・分類失敗時の非保存が結合テストで通る
   - _Requirements: 1.2, 1.3, 1.4, 2.5, 2.6, 2.7, 3.1, 3.2_
   - _Depends: 4.1_
 
-- [ ] 5.2 保存・週次レビュー・破棄/修正の結合テストを実装する
+- [x] 5.2 保存・週次レビュー・破棄/修正の結合テストを実装する
   - [保存] で checkins/evidence/evidence_goal_links が所有者スコープで作成され(複数目標で複数リンク)、週次レビューが保存され §14.2 メッセージが返ることを検証する
   - レビュー生成失敗時も証跡保存が保持されること、[破棄]/[修正] の挙動、別人/不在 pending での非保存を検証する
   - 完了状態: 保存・レビュー・破棄・修正・所有者スコープ・部分失敗非残存の各シナリオが結合テストで通る
   - _Requirements: 3.3, 3.4, 3.5, 3.7, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1, 5.2, 5.3, 5.5_
   - _Depends: 4.1_
 
-- [ ] 5.3 プライバシー・境界の E2E/スモークテストを実装する
+- [x] 5.3 プライバシー・境界の E2E/スモークテストを実装する
   - サイクル + 目標登録済みから `/checkin` → modal 入力 → 分類 → [保存] → 保存後メッセージまで通し、証跡・リンク・週次レビューが単一権威に揃う critical path を検証する
   - 全応答が ephemeral(本人限定)であること、自動分類が [保存] なしに確定しないこと、他ユーザーデータへアクセスしないこと、スキーマ/Agent/LLM/Discord 規約を再定義せず上流契約を消費していることを確認する
   - 完了状態: critical path が通り、保存前確認・ephemeral 限定・所有者スコープ・上流契約消費の各プライバシー/境界要件がスモークテストで確認できる
   - _Requirements: 1.5, 3.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
   - _Depends: 4.1_
-  - _Blocked: 4.1 がブロック中のため連鎖ブロック(5.1/5.2/5.3 はいずれも _Depends: 4.1_)。_
+  - _Unblocked (2026-06-14): 4.1 のブロック解除に伴い連鎖ブロックも解消(5.1/5.2/5.3 はいずれも _Depends: 4.1_)。_
 
 ## Implementation Notes
 
 - **3.1 完了 (2026-06-14)**: `/checkin` コマンドハンドラ + [入力する] ボタンハンドラを実装。discord-gateway の reply+components / modal を開く契約(commit 0b61c85 で追加済み)を消費。当初の `_Blocked:_`(reply が components 非対応)は上流で解消済みだったため解除して実装。`custom-ids.ts` に modal の入力フィールド custom_id `CHECKIN_INPUT_FIELD_ID` を追加(3.2 の modal submit が読む)。
-- **pending 分類の DO 常駐状態 = infra-foundation 契約ギャップ (決定 2026-06-14: infra-foundation へ差し戻し)**:
+- **pending 分類の DO 常駐状態 = infra-foundation 契約ギャップ (解決済み 2026-06-14: infra-foundation task 4.5 で汎用揮発 KV を追加。3.2/3.3/4.1/5.3 のブロック解除済み)**:
   - 課題: `/checkin` の「分類→確認」(modal submit)と「保存/破棄/修正」(ボタン)は別々の Discord interaction リクエスト。ボタン custom_id には pendingId しか乗らないため、確定対象の分類結果([修正] 編集を含む)はリクエスト跨ぎで保持する必要があり、DO(EvaluationCycleAgent インスタンス)常駐の揮発状態が唯一の正しい置き場(design State Management「Agent インスタンスメモリ」と一致)。
   - 衝突: design のフロー/Modified Files は「Agent が pending を保持し handler が `agent.classifyCheckin`/`generateWeeklyReview` を呼ぶ」を想定するが、`test/boundary.test.ts` L169-193 (infra-foundation Req 6.2) が Agent への `classifyCheckin`/`generate*(Draft|Review|Evaluation)` 等ドメインメソッド名の追加を機械的に禁止。完了済みドメイン関数(domain/checkin-operations.ts, task 2.x)は同期 Map の `PendingCheckinStore` をパラメータ受け取りで設計され、本番のクロスリクエスト永続化の置き場が未定義。
   - 必要な上流契約(infra-foundation で EvaluationCycleAgent に追加): 汎用 ephemeral instance-state surface。ドメイン名を含まない汎用 callable(例 `putEphemeral(key: string, value: string): void` / `getEphemeral(key: string): string | null` / `deleteEphemeral(key: string): void`)で、per-instance Map を保持し非永続(DO 再起動で消失 = design の「再実行」許容)。これにより本スペックは pending 分類を不透明 JSON として DO に保持し、ドメインロジックは worker で実行でき、境界テストにも適合する。
   - 本スペック側の後続対応(上流契約確定後): checkin-classification 用 routing ヘルパーで上記 surface を `PendingCheckinStore` 互換の async ラッパへ橋渡しし、3.2/3.3 ハンドラから消費する。domain/checkin-operations.ts の同期 store を async DO-backed に適応(または handler 側で hydrate/persist)。
+- **動的 custom_id ディスパッチ = discord-gateway 契約ギャップ (解決済み 2026-06-14: 選択肢B 採用)**:
+  - 課題: 保存/修正/破棄ボタンは custom_id に pendingId を埋め込む(`checkin:save:<pendingId>`)が、discord-gateway の dispatcher は registry の **完全一致**で照合する(registry.ts の exact Map lookup、dispatch.ts の `nameOf` は custom_id 全体を返す)。動的サフィックス付き custom_id は静的登録キー `checkin:save` に一致せずディスパッチできなかった。
+  - 解決(ユーザー選択 = gateway に prefix 照合を追加): discord-gateway の `registry.ts` に `registerPrefix`/`registerPrefixHandler` を追加し、`lookup` は完全一致を優先・無ければ最長前方一致の接頭辞ハンドラへフォールバックするよう拡張。dispatch.ts は無変更(`lookupHandler` に prefix フォールバックを内包)。custom-ids.ts の pendingId 埋め込みは維持。
+  - 本スペック側: `register.ts` が `/checkin`・[入力する]・modal を完全一致登録、保存/修正/破棄を接頭辞(`checkin:save:` 等。区切り `:` を含めて誤一致防止)で登録する。pending 分類は `routing.ts`(getCheckinEphemeralKv + hydrate/persist)が infra 揮発 KV を `PendingCheckinStore` 互換へ橋渡しし、key=pendingId で保持する。
+  - 上流変更の所在: `src/discord/registry.ts`(prefix dispatch)、`src/discord/commands/definitions.ts` は無変更(既存 API のみ使用)。boundary test(Req 6.2)は Agent/Repository/LLM 層を検査対象とし、gateway registry 変更には非該当。
+  - 保存ボタンは週次レビュー LLM 呼び出しを含むため、Discord の 3 秒初期応答制約に合わせ design 図(reply)から **deferred** へ調整した(correctness 上の必須対応。保存後メッセージは follow-up で送る)。
+  - [修正] は MVP として元自由文を充填した checkin modal(CHECKIN_MODAL_ID)を再提示し、旧 pending を破棄して再送信→再分類につなぐ(design の EDIT_MODAL_ID 専用 modal は未導入)。
