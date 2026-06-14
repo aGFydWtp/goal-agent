@@ -11,7 +11,7 @@ import {
   resolveActiveCycle,
 } from "../../goal-management/domain/cycle-operations";
 import type { LlmClient, LlmError } from "../../llm/client";
-import type { EvaluationCycleRow } from "../../types";
+import type { CheckinRow, EvaluationCycleRow, EvidenceGoalLinkRow, EvidenceRow } from "../../types";
 import { buildClassificationPrompt } from "../classification/prompt";
 import { type ClassificationResult, classificationResultSchema } from "../classification/schema";
 import { guardNonEmptyCheckinInput, verifyClassificationResult } from "../classification/verify";
@@ -212,6 +212,25 @@ export function getPendingClassification(
 /** pending 分類の破棄結果。 */
 export type DiscardPendingClassificationResult = { ok: true } | { ok: false; reason: "not_found" };
 
+/** pending 分類を証跡として保存する入力。 */
+export interface SaveClassifiedCheckinInput {
+  userId: string;
+  pendingId: string;
+  /** テスト/呼び出し側が週開始日を明示したい場合の注入点。未指定時は deps.now() の UTC 月曜。 */
+  weekStartDate?: string;
+}
+
+/** pending 分類の証跡化保存結果。 */
+export type SaveClassifiedCheckinResult =
+  | {
+      ok: true;
+      checkinId: string;
+      evidenceIds: string[];
+      weekStartDate: string;
+    }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "save_failed"; cause?: unknown };
+
 /**
  * pending 分類を所有者スコープで破棄する。
  *
@@ -229,4 +248,105 @@ export function discardPendingClassification(
   }
   store.classifications.delete(pending.pendingId);
   return { ok: true };
+}
+
+/** ISO timestamp から UTC 基準の月曜週開始日(YYYY-MM-DD)を返す。 */
+function weekStartDateFromUtcTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("invalid timestamp");
+  }
+  const day = date.getUTCDay();
+  const daysSinceMonday = (day + 6) % 7;
+  const monday = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - daysSinceMonday),
+  );
+  return monday.toISOString().slice(0, 10);
+}
+
+/**
+ * pending 分類を checkins/evidence/evidence_goal_links として保存する。
+ *
+ * pending 不在または userId 不一致は `not_found` に正規化し、DB と pending を変更しない。
+ * Repository に transaction API が無いため、挿入済み ID を記録して失敗時に逆順削除する。
+ */
+export async function saveClassifiedCheckin(
+  authority: CycleDataAuthority,
+  deps: DomainDeps,
+  store: PendingCheckinStore,
+  input: SaveClassifiedCheckinInput,
+): Promise<SaveClassifiedCheckinResult> {
+  const pending = getPendingClassification(store, input.userId, input.pendingId);
+  if (pending === null) {
+    return { ok: false, reason: "not_found" };
+  }
+
+  const timestamp = deps.now();
+  const weekStartDate = input.weekStartDate ?? weekStartDateFromUtcTimestamp(timestamp);
+  const insertedLinkIds: string[] = [];
+  const insertedEvidenceIds: string[] = [];
+  let insertedCheckinId: string | null = null;
+
+  try {
+    const checkin: CheckinRow = {
+      id: deps.newId(),
+      cycle_id: pending.cycleId,
+      user_id: pending.userId,
+      raw_text: pending.rawText,
+      week_start_date: weekStartDate,
+      created_at: timestamp,
+    };
+    await authority.insertRow("checkins", checkin);
+    insertedCheckinId = checkin.id;
+
+    for (const item of pending.result.items) {
+      const evidence: EvidenceRow = {
+        id: deps.newId(),
+        cycle_id: pending.cycleId,
+        user_id: pending.userId,
+        source_type: "manual_checkin",
+        source_url: null,
+        title: item.suggestedEvidenceTitle,
+        body: item.text,
+        evidence_date: weekStartDate,
+        usefulness: item.usefulness,
+        created_at: timestamp,
+        updated_at: timestamp,
+      };
+      await authority.insertRow("evidence", evidence);
+      insertedEvidenceIds.push(evidence.id);
+
+      for (const candidateGoal of item.candidateGoals) {
+        const link: EvidenceGoalLinkRow = {
+          id: deps.newId(),
+          evidence_id: evidence.id,
+          goal_id: candidateGoal.goalId,
+          relevance_score: candidateGoal.relevanceScore,
+          reason: candidateGoal.reason,
+          created_at: timestamp,
+        };
+        await authority.insertRow("evidence_goal_links", link);
+        insertedLinkIds.push(link.id);
+      }
+    }
+
+    store.classifications.delete(pending.pendingId);
+    return {
+      ok: true,
+      checkinId: checkin.id,
+      evidenceIds: insertedEvidenceIds,
+      weekStartDate,
+    };
+  } catch (cause) {
+    for (const linkId of insertedLinkIds.slice().reverse()) {
+      await authority.removeRow("evidence_goal_links", linkId);
+    }
+    for (const evidenceId of insertedEvidenceIds.slice().reverse()) {
+      await authority.removeRow("evidence", evidenceId);
+    }
+    if (insertedCheckinId !== null) {
+      await authority.removeRow("checkins", insertedCheckinId);
+    }
+    return { ok: false, reason: "save_failed", cause };
+  }
 }
