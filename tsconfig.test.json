@@ -1,0 +1,30 @@
+{
+  // Node プロジェクト("node" vitest project)のテストを型チェック対象に含める設定。
+  //
+  // 背景: ベース tsconfig の include は src のみで test/** を含まないため、不正な列挙値や
+  // 型不整合がテストコードに紛れても検出できなかった(例: repository.test.ts の
+  // 列挙値ミス)。本設定で node プロジェクトのテスト群を型チェックする。
+  //
+  // スコープ: ここで対象にするのは vitest の "node" プロジェクトに属するテストのみ。
+  // "workers" プロジェクトのテスト(cloudflare:test の `env` が runtime 生成の
+  // `Cloudflare.Env` に依存する)は `wrangler types` による runtime 型生成を前提とし、
+  // 静的型チェックの構成が大きく異なるため本設定の対象外とする。
+  //
+  // 型解決:
+  // - types はベース(@cloudflare/workers-types)を継承する。@types/node は意図的に
+  //   入れない(その lib 参照が Disposable を解決へ漏らし、本番 src の RPC 戻り値
+  //   キャストとの整合を壊して pnpm typecheck を破壊するため)。
+  // - 代わりに test/node-builtins.d.ts で、テストが使う Node 組み込み API のみを最小宣言。
+  "extends": "./tsconfig.json",
+  "include": [
+    "test/node-builtins.d.ts",
+    "test/migrator.test.ts",
+    "test/repository.test.ts",
+    "test/llm-client.test.ts",
+    "test/llm-workers-ai.test.ts",
+    "test/agent-ids.test.ts",
+    "test/boundary.test.ts",
+    "test/helpers/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", ".wrangler"]
+}

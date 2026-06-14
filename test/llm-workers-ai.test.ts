@@ -14,7 +14,9 @@ function makeAi(run: FakeAi["run"]): Ai {
   return { run } as unknown as Ai;
 }
 
-const MODEL = "@cf/meta/llama-3.1-8b-instruct";
+// WorkersAiLlmClient のコンストラクタは `keyof AiModels` を要求するため、
+// 実在するモデル id を明示型で指定する(任意の有効なモデルでよい)。
+const MODEL: keyof AiModels = "@cf/meta/llama-3.1-8b-instruct-fp8";
 
 describe("WorkersAiLlmClient.complete (Req 4.2, 4.3)", () => {
   it("成功時は AI 応答の response テキストを value として返す", async () => {
@@ -33,7 +35,9 @@ describe("WorkersAiLlmClient.complete (Req 4.2, 4.3)", () => {
     await client.complete({ prompt: "p", maxTokens: 64, temperature: 0.2 });
 
     expect(run).toHaveBeenCalledTimes(1);
-    const [model, inputs] = run.mock.calls[0] as [string, Record<string, unknown>];
+    // vi.fn の実装は引数を宣言しないため calls[0] は [] | undefined と推論される。
+    // 直前で呼び出し回数を 1 と検証済みのため、unknown 経由で実引数タプルへ読み替える。
+    const [model, inputs] = run.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(model).toBe(MODEL);
     // maxTokens → max_tokens のマッピングと temperature 透過を確認。
     expect(inputs.max_tokens).toBe(64);
@@ -54,6 +58,27 @@ describe("WorkersAiLlmClient.complete (Req 4.2, 4.3)", () => {
     expect(result.error.kind).toBe("provider_error");
     expect(result.error.cause).toBeInstanceOf(Error);
   });
+
+  // 中断/タイムアウト(name=AbortError|TimeoutError)は timeout へマッピングされること(Req 4.5)。
+  // workers-ai.ts runText は cause.name で timeout / provider_error を判別する。
+  it.each([["AbortError"], ["TimeoutError"]])(
+    "AI 呼び出しが %s で reject した場合は timeout を返す",
+    async (name) => {
+      const ai = makeAi(async () => {
+        const err = new Error("aborted");
+        err.name = name;
+        throw err;
+      });
+      const client = new WorkersAiLlmClient(ai, MODEL);
+
+      const result = await client.complete({ prompt: "hi" });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected failure");
+      expect(result.error.kind).toBe("timeout");
+      expect(result.error.cause).toBeInstanceOf(Error);
+    },
+  );
 });
 
 describe("WorkersAiLlmClient.completeJson (Req 4.2, 4.5, design completeJson contract)", () => {
@@ -146,6 +171,22 @@ describe("WorkersAiLlmClient.completeJson (Req 4.2, 4.5, design completeJson con
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
     expect(result.error.kind).toBe("provider_error");
+  });
+
+  // completeJson でも中断/タイムアウトは timeout として表面化すること(Req 4.5)。
+  it("基盤呼び出しが TimeoutError で失敗した場合は timeout として表面化する", async () => {
+    const ai = makeAi(async () => {
+      const err = new Error("deadline exceeded");
+      err.name = "TimeoutError";
+      throw err;
+    });
+    const client = new WorkersAiLlmClient(ai, MODEL);
+
+    const result = await client.completeJson({ prompt: "p" }, schema);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure");
+    expect(result.error.kind).toBe("timeout");
   });
 });
 

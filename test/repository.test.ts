@@ -245,7 +245,7 @@ const FULL_ROWS: { [E in EntityName]: EntityRow<E> } = {
     title: "マイルストーン",
     description: "詳細",
     due_date: "2026-03-31",
-    status: "in_progress",
+    status: "doing",
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
   } satisfies MilestoneRow,
@@ -261,7 +261,7 @@ const FULL_ROWS: { [E in EntityName]: EntityRow<E> } = {
     id: "ev-full",
     cycle_id: "cyc-full",
     user_id: "user-1",
-    source_type: "discord_link",
+    source_type: "discord_message",
     source_url: "https://example.com/x",
     title: "証跡タイトル",
     body: "証跡本文",
@@ -293,7 +293,7 @@ const FULL_ROWS: { [E in EntityName]: EntityRow<E> } = {
     cycle_id: "cyc-full",
     goal_id: "goal-full",
     user_id: "user-1",
-    type: "goal_proposal",
+    type: "self_evaluation",
     body: "ドラフト本文",
     created_at: "2026-01-10T00:00:00.000Z",
     updated_at: "2026-01-10T00:00:00.000Z",
@@ -379,9 +379,11 @@ describe("repository: §11 全 8 エンティティの共有型整合 round-trip
           const fetched = repo.getById(entity, (nulled as { id: string }).id);
           expect(fetched).toEqual(nulled);
           // null 列がキー欠落(undefined)になっていないことを明示確認。
-          const full = FULL_ROWS[entity] as Record<string, unknown>;
-          const nulledRec = nulled as Record<string, unknown>;
-          const fetchedRec = fetched as Record<string, unknown>;
+          // 行の共有型(EntityRow)は index signature を持たないため、汎用的な
+          // キー走査用に unknown 経由で Record<string, unknown> へ読み替える。
+          const full = FULL_ROWS[entity] as unknown as Record<string, unknown>;
+          const nulledRec = nulled as unknown as Record<string, unknown>;
+          const fetchedRec = fetched as unknown as Record<string, unknown>;
           for (const key of Object.keys(full)) {
             if (nulledRec[key] === null) {
               expect(fetchedRec).toHaveProperty(key, null);
