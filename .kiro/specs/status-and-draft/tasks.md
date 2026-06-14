@@ -70,7 +70,7 @@
   - _Depends: 3.1_
 
 - [ ] 6. 統合: ハンドラ実装と Discord ゲートウェイへの登録
-- [ ] 6.1 閲覧コマンドハンドラ(/status・/goal status・/evidence list)を実装する
+- [x] 6.1 閲覧コマンドハンドラ(/status・/goal status・/evidence list)を実装する
   - `/status` をサイクル/目標確認 → deferred → 全目標判定 → §8.4 follow-up とし、サイクル無し/目標無しを案内する
   - `/goal status` を deferred → 単一目標判定 + 証跡/不足/次アクション → §8.5 follow-up とし、非所有/不存在を「見つからない」にする
   - `/evidence list` を所有者スコープ証跡取得 → §8.6 即時 ephemeral 応答とし、証跡無しを案内する
