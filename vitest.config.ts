@@ -66,6 +66,8 @@ export default defineConfig({
             "test/checkin-classification-classify-domain.test.ts",
             // 証跡化保存ドメインメソッド(checkin-classification task 2.3)。pending 確定→checkins/evidence/links 保存とロールバックを検証する。
             "test/checkin-classification-save-domain.test.ts",
+            // 週次レビュー生成ドメインメソッド(checkin-classification task 2.4)。保存済み内容→LLM→weekly_reviews 保存と失敗時の証跡保持を検証する。
+            "test/checkin-classification-weekly-review-domain.test.ts",
             // サイクル作成ドメインロジック(goal-management task 2.1)。実 SQLite を async ラップして検証する。
             "test/goal-management-cycle-operations.test.ts",
             // 目標登録ドメインロジック(goal-management task 2.2)。対象サイクル解決と goals insert を検証する。

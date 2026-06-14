@@ -11,10 +11,18 @@ import {
   resolveActiveCycle,
 } from "../../goal-management/domain/cycle-operations";
 import type { LlmClient, LlmError } from "../../llm/client";
-import type { CheckinRow, EvaluationCycleRow, EvidenceGoalLinkRow, EvidenceRow } from "../../types";
+import type {
+  CheckinRow,
+  EvaluationCycleRow,
+  EvidenceGoalLinkRow,
+  EvidenceRow,
+  WeeklyReviewRow,
+} from "../../types";
 import { buildClassificationPrompt } from "../classification/prompt";
 import { type ClassificationResult, classificationResultSchema } from "../classification/schema";
 import { guardNonEmptyCheckinInput, verifyClassificationResult } from "../classification/verify";
+import { buildWeeklyReviewPrompt } from "../weekly-review/prompt";
+import { type WeeklyReview, weeklyReviewSchema } from "../weekly-review/schema";
 
 /** `/checkin` 起点で使う対象サイクル解決結果。 */
 export type ResolveCheckinActiveCycleResult =
@@ -231,6 +239,27 @@ export type SaveClassifiedCheckinResult =
   | { ok: false; reason: "not_found" }
   | { ok: false; reason: "save_failed"; cause?: unknown };
 
+/** 週次レビュー生成の入力。保存済み内容の対象週を呼び出し側で明示する。 */
+export interface GenerateWeeklyReviewInput {
+  userId: string;
+  cycleId: string;
+  weekStartDate: string;
+}
+
+/** 週次レビュー生成結果。失敗しても既存の checkins/evidence/links は保持する。 */
+export type GenerateWeeklyReviewResult =
+  | {
+      ok: true;
+      reviewId: string;
+      review: WeeklyReview;
+    }
+  | {
+      ok: false;
+      reason: "review_failed";
+      errorKind: LlmError["kind"];
+    }
+  | { ok: false; reason: "review_failed"; cause?: unknown };
+
 /**
  * pending 分類を所有者スコープで破棄する。
  *
@@ -348,5 +377,108 @@ export async function saveClassifiedCheckin(
       await authority.removeRow("checkins", insertedCheckinId);
     }
     return { ok: false, reason: "save_failed", cause };
+  }
+}
+
+function serializeReviewItems(items: readonly string[]): string | null {
+  return items.length === 0 ? null : JSON.stringify(items);
+}
+
+/**
+ * 保存済み checkins/evidence/evidence_goal_links から当該週の週次レビューを生成して保存する。
+ *
+ * レビュー生成・保存の失敗は証跡保存の成否から切り離し、既存の checkins/evidence/links は
+ * ロールバックしない。weekly_reviews 挿入で例外が出た場合のみ、念のため同 ID のレビュー行を
+ * 削除してレビュー側の部分書き込みを残さない。
+ */
+export async function generateWeeklyReview(
+  authority: CycleDataAuthority,
+  deps: DomainDeps,
+  llm: LlmClient,
+  input: GenerateWeeklyReviewInput,
+): Promise<GenerateWeeklyReviewResult> {
+  const [goals, checkins, evidenceItems] = await Promise.all([
+    listGoals(authority, input.userId, input.cycleId),
+    authority.listRowsBy("checkins", {
+      cycle_id: input.cycleId,
+      user_id: input.userId,
+      week_start_date: input.weekStartDate,
+    }),
+    authority.listRowsBy("evidence", {
+      cycle_id: input.cycleId,
+      user_id: input.userId,
+      evidence_date: input.weekStartDate,
+    }),
+  ]);
+
+  const evidenceForPrompt = await Promise.all(
+    evidenceItems.map(async (evidence) => {
+      const linkedGoals = await authority.listRowsBy("evidence_goal_links", {
+        evidence_id: evidence.id,
+      });
+      return {
+        id: evidence.id,
+        title: evidence.title,
+        body: evidence.body,
+        usefulness: evidence.usefulness,
+        linkedGoals: linkedGoals.map((link) => ({
+          goalId: link.goal_id,
+          relevanceScore: link.relevance_score,
+          reason: link.reason,
+        })),
+      };
+    }),
+  );
+
+  const promptRequest = buildWeeklyReviewPrompt({
+    goals: goals.map((goal) => ({
+      id: goal.id,
+      title: goal.title,
+      description: goal.description,
+      success_criteria: goal.success_criteria,
+    })),
+    weekStartDate: input.weekStartDate,
+    checkins: checkins.map((checkin) => ({
+      id: checkin.id,
+      raw_text: checkin.raw_text,
+    })),
+    evidence: evidenceForPrompt,
+  });
+
+  const llmResult = await llm.completeJson(promptRequest, weeklyReviewSchema);
+  if (!llmResult.ok) {
+    return {
+      ok: false,
+      reason: "review_failed",
+      errorKind: llmResult.error.kind,
+    };
+  }
+
+  const reviewId = deps.newId();
+  const reviewRow: WeeklyReviewRow = {
+    id: reviewId,
+    cycle_id: input.cycleId,
+    user_id: input.userId,
+    week_start_date: input.weekStartDate,
+    summary: llmResult.value.summary,
+    risks: serializeReviewItems(llmResult.value.risks),
+    next_actions: serializeReviewItems(llmResult.value.next_actions),
+    created_at: deps.now(),
+  };
+
+  try {
+    await authority.insertRow("weekly_reviews", reviewRow);
+    return {
+      ok: true,
+      reviewId,
+      review: llmResult.value,
+    };
+  } catch (cause) {
+    try {
+      await authority.removeRow("weekly_reviews", reviewId);
+    } catch {
+      // レビュー側の掃除に失敗しても、既存の証跡保存結果は巻き戻さない。
+    }
+    return { ok: false, reason: "review_failed", cause };
   }
 }
