@@ -7,6 +7,7 @@ import type { APIInteraction } from "discord-api-types/v10";
 import { InteractionResponseType, InteractionType } from "discord-interactions";
 
 import { getCycleAgent, getGoalAgent } from "./agents/routing";
+import { registerCheckinClassification } from "./checkin-classification/register";
 import { dispatchInteraction } from "./discord/dispatch";
 import type { DiscordEnv } from "./discord/env";
 import { verifyInteraction } from "./discord/verify";
@@ -19,6 +20,9 @@ export { GoalAgent } from "./agents/goal-agent";
 // goal-management のハンドラ登録とコマンド定義集約を起動時に一度行う (design L142 承認済み)。
 // dispatch はデフォルトレジストリを照合するため、interaction を受ける前に登録を済ませる。
 registerGoalManagement();
+// checkin-classification(/checkin 系ハンドラ + コマンド定義)も同様に起動時へ登録する
+// (checkin-classification task 4.1)。保存/修正/破棄ボタンは接頭辞ディスパッチで解決される。
+registerCheckinClassification();
 
 /**
  * 配線疎通プローブ用のセンチネル識別子。
