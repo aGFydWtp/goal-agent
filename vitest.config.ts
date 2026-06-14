@@ -50,6 +50,8 @@ export default defineConfig({
             "test/goal-management-validation.test.ts",
             // 所有者スコープ強制ヘルパー(goal-management task 1.2)。user_id 一致検証の純粋ロジック。
             "test/goal-management-ownership.test.ts",
+            // コマンド定義(goal-management task 1.3)。application command 定義と modal custom_id 規約の純粋データ。
+            "test/goal-management-commands.test.ts",
           ],
         },
       },

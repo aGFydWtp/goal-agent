@@ -14,7 +14,7 @@
   - _Requirements: 4.1, 4.2, 3.4_
   - _Boundary: Ownership Scope Helper_
 
-- [ ] 1.3 (P) コマンド定義を作成
+- [x] 1.3 (P) コマンド定義を作成
   - `/cycle create`(name/start/end オプション)・`/goal add`・`/evidence delete`(id オプション)の application command 定義を作成する
   - goal 入力 modal の custom_id 規約(GOAL_MODAL_ID と各フィールド custom_id)を定義する
   - 完了状態: 3 コマンドの定義と modal/フィールドの custom_id 規約が型付きで公開され、後段の登録処理から参照できる
