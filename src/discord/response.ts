@@ -5,6 +5,9 @@ import type {
   APIInteractionResponseDeferredChannelMessageWithSource,
   APIInteractionResponsePong,
   APIModalInteractionResponse,
+  // 応答ボディ型の `type` フィールド(DAT enum メンバ)へ実行時値をキャストするための型。
+  // `import type` は実行時に消去されるため workerd の enum 値 undefined 問題は起きない。
+  InteractionResponseType as ApiResponseType,
 } from "discord-api-types/v10";
 
 import type { HandlerResult } from "./types";
@@ -58,7 +61,7 @@ function ephemeralFlag(ephemeral?: boolean): number | undefined {
  * PING に対する PONG 応答ボディ(type 1)を生成する (Req 1.4)。
  */
 export function pong(): APIInteractionResponsePong {
-  return { type: InteractionResponseType.PONG };
+  return { type: InteractionResponseType.PONG as unknown as ApiResponseType.Pong };
 }
 
 /**
@@ -72,7 +75,7 @@ export function reply(
 ): APIInteractionResponseChannelMessageWithSource {
   const flags = ephemeralFlag(opts?.ephemeral);
   return {
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE as unknown as ApiResponseType.ChannelMessageWithSource,
     data: flags === undefined ? { content } : { content, flags },
   };
 }
@@ -89,7 +92,7 @@ export function deferred(
 ): APIInteractionResponseDeferredChannelMessageWithSource {
   const flags = ephemeralFlag(opts?.ephemeral);
   return {
-    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE as unknown as ApiResponseType.DeferredChannelMessageWithSource,
     data: flags === undefined ? {} : { flags },
   };
 }
@@ -102,7 +105,7 @@ export function deferred(
  */
 export function modal(input: ModalInput): APIModalInteractionResponse {
   return {
-    type: InteractionResponseType.MODAL,
+    type: InteractionResponseType.MODAL as unknown as ApiResponseType.Modal,
     data: {
       custom_id: input.customId,
       title: input.title,
