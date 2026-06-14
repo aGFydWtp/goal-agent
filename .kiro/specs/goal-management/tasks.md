@@ -68,7 +68,7 @@
   - _Boundary: Goal Add / Modal Submit Handlers_
   - _Depends: 1.3_
 
-- [ ] 3.3 goal modal submit ハンドラを実装
+- [x] 3.3 goal modal submit ハンドラを実装
   - modal 送信の各フィールド値を取り出し、必須検証→目標登録ドメイン呼び出し→GoalAgent 確立→結果整形を行う
   - 必須欠落は不足項目を示す ephemeral 応答、対象サイクル無しは先にサイクル作成が必要な旨の ephemeral 応答、成功時は目標名を含む ephemeral 確認応答を返す
   - 完了状態: 正常 submit で目標が保存され GoalAgent が確立し ephemeral 確認応答、必須欠落/サイクル無しで各エラー応答が返ることを確認できる

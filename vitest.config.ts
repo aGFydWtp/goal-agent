@@ -64,6 +64,8 @@ export default defineConfig({
             "test/goal-management-cycle-create-handler.test.ts",
             // /goal add ハンドラ(goal-management task 3.2)。modal 提示 payload を DO 無しで構造検証する。
             "test/goal-management-goal-add-handler.test.ts",
+            // goal modal submit ハンドラ(goal-management task 3.3)。必須検証→保存→GoalAgent 確立を DO 無しで検証する。
+            "test/goal-management-goal-modal-submit-handler.test.ts",
           ],
         },
       },

@@ -63,15 +63,39 @@ export async function getUserCycleAuthority(
 /**
  * 実行ユーザー・目標のロジック境界(GoalAgent)を同一データホーム下で取得する。
  *
- * GoalAgent も `evaluation:{userId}:primary:goal:{goalId}` で同一ホームに解決する
- * (tasks.md Implementation Notes)。本タスク(3.1)では未使用だが、下流スペックが
- * 同一規約で目標境界へ解決できるよう共有依存として併せて公開する。
+ * GoalAgent も `evaluation:{userId}:primary:goal:{goalId}` で同一ホームに解決し、
+ * 自前ストレージを持たず全 read/write を親 EvaluationCycleAgent(データ権威)へ委譲する。
+ * よって GoalAgent スタブも `insertRow`/`getRowById`/`listRowsBy`/`removeRow` の
+ * passthrough サーフェスを公開し、{@link CycleDataAuthority} を構造的に満たす。
+ *
+ * {@link getUserCycleAuthority} と同じく、スタブの RPC 戻り値は呼び出しごとの具体 union に
+ * 展開されジェネリックシグネチャへ直接代入できないため、各メソッドを薄くラップした明示
+ * アダプタを返して型安全に橋渡しする(全体キャストや `any` は用いない)。これにより
+ * 目標保存後の確立確認(`getGoalDefinition` の親委譲読み取り)を GoalAgent 経由で行える。
  *
  * @param env Discord secrets と infra バインディングを含む実行環境。
  * @param userId 実行ユーザー識別子。
  * @param goalId 対象目標識別子。
- * @returns 実行ユーザー・目標の GoalAgent スタブ。
+ * @returns 実行ユーザー・目標の GoalAgent を介したデータ権威(親委譲)。
  */
-export function getUserGoalAgent(env: DiscordEnv, userId: string, goalId: string) {
-  return getGoalAgent(env, userId, PRIMARY_CYCLE_KEY, goalId);
+export async function getUserGoalAgent(
+  env: DiscordEnv,
+  userId: string,
+  goalId: string,
+): Promise<CycleDataAuthority> {
+  const stub = await getGoalAgent(env, userId, PRIMARY_CYCLE_KEY, goalId);
+  // getUserCycleAuthority と同様、ジェネリック戻り値の橋渡しを各メソッドへ局所化する。
+  return {
+    insertRow: <E extends EntityName>(entity: E, row: EntityRow<E>): Promise<void> =>
+      stub.insertRow(entity, row),
+    getRowById: <E extends EntityName>(entity: E, id: string): Promise<EntityRow<E> | null> =>
+      stub.getRowById(entity, id) as unknown as Promise<EntityRow<E> | null>,
+    listRowsBy: <E extends EntityName>(
+      entity: E,
+      where: Partial<EntityRow<E>>,
+    ): Promise<EntityRow<E>[]> =>
+      stub.listRowsBy(entity, where) as unknown as Promise<EntityRow<E>[]>,
+    removeRow: <E extends EntityName>(entity: E, id: string): Promise<void> =>
+      stub.removeRow(entity, id),
+  };
 }
