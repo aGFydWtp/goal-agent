@@ -1,5 +1,3 @@
-import { InteractionResponseFlags, InteractionResponseType } from "discord-interactions";
-
 import type {
   APIInteractionResponseChannelMessageWithSource,
   APIInteractionResponseDeferredChannelMessageWithSource,
@@ -9,6 +7,7 @@ import type {
   // `import type` は実行時に消去されるため workerd の enum 値 undefined 問題は起きない。
   InteractionResponseType as ApiResponseType,
 } from "discord-api-types/v10";
+import { InteractionResponseFlags, InteractionResponseType } from "discord-interactions";
 
 import type { HandlerResult } from "./types";
 

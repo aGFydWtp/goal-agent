@@ -142,17 +142,9 @@ export async function sendWebhookMessage(
  * `Authorization: Bot {token}` を付与する。成功時はレスポンスの `id` を
  * {@link DmOpenResult.channelId} として返し、後続のメッセージ送信に用いる。
  */
-export async function openDmChannel(
-  env: DiscordEnv,
-  recipientId: string,
-): Promise<DmOpenResult> {
+export async function openDmChannel(env: DiscordEnv, recipientId: string): Promise<DmOpenResult> {
   const url = `${API_BASE}/users/@me/channels`;
-  const res = await request(
-    "POST",
-    url,
-    { recipient_id: recipientId },
-    env.DISCORD_BOT_TOKEN,
-  );
+  const res = await request("POST", url, { recipient_id: recipientId }, env.DISCORD_BOT_TOKEN);
   if (!res.ok) {
     return normalizeFailure(res.status);
   }
@@ -174,11 +166,6 @@ export async function sendChannelMessage(
   opts?: SendOptions,
 ): Promise<SendResult> {
   const url = `${API_BASE}/channels/${channelId}/messages`;
-  const res = await request(
-    "POST",
-    url,
-    messageBody(content, opts),
-    env.DISCORD_BOT_TOKEN,
-  );
+  const res = await request("POST", url, messageBody(content, opts), env.DISCORD_BOT_TOKEN);
   return res.ok ? { ok: true } : normalizeFailure(res.status);
 }

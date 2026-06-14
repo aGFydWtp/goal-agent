@@ -1,11 +1,10 @@
-import { InteractionType } from "discord-interactions";
-
 import type { APIInteraction } from "discord-api-types/v10";
+import { InteractionType } from "discord-interactions";
 
 import type { DiscordEnv } from "./env";
 import { createFollowup } from "./followup";
 import { lookupHandler } from "./registry";
-import { type ResponseOptions, deferred, modal, reply } from "./response";
+import { deferred, modal, type ResponseOptions, reply } from "./response";
 import type { InteractionContext, InteractionKind } from "./types";
 
 /**

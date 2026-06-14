@@ -80,11 +80,7 @@ export async function sendDirectMessage(
  * open / send いずれの失敗も正規化済み {@link SendResult} として返す。DM open が 403 の
  * 場合は DM 不可を表す `forbidden` を返し、呼び出し元のフォールバック判定に委ねる。
  */
-async function sendViaDm(
-  env: DiscordEnv,
-  userId: string,
-  content: string,
-): Promise<SendResult> {
+async function sendViaDm(env: DiscordEnv, userId: string, content: string): Promise<SendResult> {
   const opened = await openDmChannel(env, userId);
   if (!opened.ok) {
     // DmOpenResult の失敗変種は SendResult の失敗変種と構造的に一致するため、

@@ -142,10 +142,7 @@ export interface ModalTextInput {
  * フェイスを介してハンドラを登録・実行する。
  */
 export interface InteractionHandler {
-  handle(
-    ctx: InteractionContext,
-    env: DiscordEnv,
-  ): Promise<HandlerResult> | HandlerResult;
+  handle(ctx: InteractionContext, env: DiscordEnv): Promise<HandlerResult> | HandlerResult;
 }
 
 /**
@@ -153,9 +150,8 @@ export interface InteractionHandler {
  * あることをコンパイル時に検証する(ランタイムコストゼロ)。`label` を必須にする等、
  * 本ローカル型はより厳格な制約を課すが、payload としては互換であることを保証する。
  */
-type _AssertModalActionRowCompatible = ModalActionRow extends APIActionRowComponent<APIComponentInModalActionRow>
-  ? true
-  : never;
+type _AssertModalActionRowCompatible =
+  ModalActionRow extends APIActionRowComponent<APIComponentInModalActionRow> ? true : never;
 // 互換でなければ never となり、下記 const 初期化が型エラーになる。
 const _assertModalActionRowCompatible: _AssertModalActionRowCompatible = true;
 void _assertModalActionRowCompatible;
