@@ -41,6 +41,7 @@ export default defineConfig({
             "test/types.test.ts",
             "test/schema.test.ts",
             "test/evaluation-cycle-agent.test.ts",
+            "test/goal-agent.test.ts",
           ],
         },
       },

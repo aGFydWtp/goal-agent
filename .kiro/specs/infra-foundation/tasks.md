@@ -79,7 +79,7 @@
   - _Requirements: 3.1, 3.5_
   - _Depends: 2.2, 2.3_
 
-- [ ] 4.3 GoalAgent 骨格を実装する(目標単位ロジック)
+- [x] 4.3 GoalAgent 骨格を実装する(目標単位ロジック)
   - 目標単位の定義保持・判定・生成の責務境界メソッドを骨格として宣言し、データ読み書きを親 EvaluationCycleAgent へ委譲する
   - 完了条件: GoalAgent からの操作が親リポジトリ経由で同一 SQLite に反映される
   - _Requirements: 3.1, 3.5_
