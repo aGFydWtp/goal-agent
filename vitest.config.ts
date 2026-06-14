@@ -28,6 +28,8 @@ export default defineConfig({
             "test/discord-verify.test.ts",
             // 応答ユーティリティ(task 2.2)。応答ボディ生成の純粋ロジック。
             "test/discord-response.test.ts",
+            // REST クライアント(task 2.3)。fetch モックで純粋に検証する。
+            "test/discord-rest.test.ts",
           ],
         },
       },

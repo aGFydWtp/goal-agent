@@ -34,7 +34,7 @@
   - _Boundary: Response Utilities_
   - _Depends: 1.2_
 
-- [ ] 2.3 (P) Discord REST クライアントを実装
+- [x] 2.3 (P) Discord REST クライアントを実装
   - `fetch` + bot token 認証ヘッダの薄い REST クライアントを実装し、webhook 編集/送信・DM チャンネル open・チャンネルメッセージ送信を呼び出せるようにする
   - 非 2xx 応答を判別可能な結果(forbidden/not_found/rest_error)へ正規化する
   - 完了状態: 各 REST 呼び出しが正しいエンドポイント・認証ヘッダ・ボディで発行され、403 が forbidden に正規化されることを確認できる
