@@ -13,6 +13,7 @@ import type { DiscordEnv } from "./discord/env";
 import { verifyInteraction } from "./discord/verify";
 import { registerGoalManagement } from "./goal-management/register";
 import { createLlmClient } from "./llm/factory";
+import { registerStatusAndDraft } from "./status-and-draft/register";
 
 export { EvaluationCycleAgent } from "./agents/evaluation-cycle-agent";
 export { GoalAgent } from "./agents/goal-agent";
@@ -23,6 +24,10 @@ registerGoalManagement();
 // checkin-classification(/checkin 系ハンドラ + コマンド定義)も同様に起動時へ登録する
 // (checkin-classification task 4.1)。保存/修正/破棄ボタンは接頭辞ディスパッチで解決される。
 registerCheckinClassification();
+// status-and-draft(/status・/draft・/goal status・/evidence list + 調整/保存ボタン)も
+// 起動時へ登録する(status-and-draft task 6.3)。/goal status・/evidence list の定義は
+// goal-management 所有の goal/evidence 定義へマージするため、registerGoalManagement の後に呼ぶ。
+registerStatusAndDraft();
 
 /**
  * 配線疎通プローブ用のセンチネル識別子。

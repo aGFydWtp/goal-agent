@@ -1,4 +1,7 @@
-import type { RESTPostAPIApplicationCommandsJSONBody } from "discord-api-types/v10";
+import type {
+  APIApplicationCommandOption,
+  RESTPostAPIApplicationCommandsJSONBody,
+} from "discord-api-types/v10";
 
 /**
  * status-and-draft のコマンド定義 (Req 2.1, 3.1, 4.1, 5.1, 5.2 /
@@ -134,3 +137,39 @@ export const statusAndDraftCommandDefinitions: RESTPostAPIApplicationCommandsJSO
   statusCommandDefinition,
   draftCommandDefinition,
 ];
+
+/**
+ * `/goal status` のサブコマンド定義 (Req 2.1 / 8.3, 8.4)。
+ *
+ * goal-management 所有の `goal` トップレベル定義へ「登録時マージ」されるサブコマンド
+ * (`register.ts` の `mergeSubcommandIntoCommand`)。Discord はトップレベルコマンド名ごとに
+ * 1 定義しか許さないため、status-and-draft は `goal` 全体を再定義せず、この `status`
+ * サブコマンドだけを供給し、既存 `goal`(`add`)へ合流させる。
+ *
+ * `status` は対象目標を指す `goal`(STRING, required)オプションを 1 つ持つ。
+ */
+export const goalStatusSubcommandDefinition: APIApplicationCommandOption = {
+  name: GOAL_STATUS_SUBCOMMAND,
+  description: "指定した評価目標の状態と理由、今週やるとよいことを表示",
+  type: SUBCOMMAND,
+  options: [
+    {
+      name: GOAL_STATUS_OPT_GOAL,
+      description: "対象の評価目標 ID",
+      type: STRING,
+      required: true,
+    },
+  ],
+};
+
+/**
+ * `/evidence list` のサブコマンド定義 (Req 4.1 / 8.3, 8.4)。
+ *
+ * goal-management 所有の `evidence` トップレベル定義へ「登録時マージ」されるサブコマンド
+ * (`register.ts`)。`list` はオプションを持たない(半期全体の証跡を一覧表示する)。
+ */
+export const evidenceListSubcommandDefinition: APIApplicationCommandOption = {
+  name: EVIDENCE_LIST_SUBCOMMAND,
+  description: "保存済みの証跡を一覧表示",
+  type: SUBCOMMAND,
+};
