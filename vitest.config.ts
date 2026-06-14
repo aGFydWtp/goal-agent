@@ -30,6 +30,8 @@ export default defineConfig({
             "test/discord-response.test.ts",
             // REST クライアント(task 2.3)。fetch モックで純粋に検証する。
             "test/discord-rest.test.ts",
+            // follow-up 送信ユーティリティ(task 2.4)。fetch モックで純粋に検証する。
+            "test/discord-followup.test.ts",
           ],
         },
       },

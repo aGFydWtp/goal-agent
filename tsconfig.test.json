@@ -27,6 +27,7 @@
     "test/discord-verify.test.ts",
     "test/discord-response.test.ts",
     "test/discord-rest.test.ts",
+    "test/discord-followup.test.ts",
     "test/helpers/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", ".wrangler"]

@@ -42,7 +42,7 @@
   - _Boundary: Discord REST Client_
   - _Depends: 1.1_
 
-- [ ] 2.4 follow-up 送信ユーティリティを実装
+- [x] 2.4 follow-up 送信ユーティリティを実装
   - 本応答編集(@original の PATCH)と追加 follow-up(POST)を提供し、失敗を判別可能に返す
   - 完了状態: deferred ハンドラが follow-up 経由で本応答および失敗通知を送れる手段が公開され、token 失効時に not_found を返す
   - _Requirements: 4.2, 4.4_
