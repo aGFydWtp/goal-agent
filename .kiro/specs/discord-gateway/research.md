@@ -2,10 +2,11 @@
 
 ## Summary
 - **Feature**: `discord-gateway`
-- **Discovery Scope**: New Feature(グリーンフィールド。Cloudflare Worker + Agents SDK 上の Discord HTTP interactions ゲートウェイ)
+- **Discovery Scope**: Extension(既存 discord-gateway 契約に reply/follow-up の message component button payload を追加)
 - **Key Findings**:
   - Discord interactions エンドポイントは Ed25519 署名検証(`X-Signature-Ed25519` / `X-Signature-Timestamp` + raw body)と PING(type1)→PONG(type1) を必須とする。検証は raw リクエストボディに対して行う必要があり、JSON パース前に raw body を保持しなければならない。
   - Worker は WebSocket Gateway を常駐できないため interactions(HTTP POST)方式が唯一の正攻法(roadmap で確定済み)。初期応答は 3 秒以内、deferred(type5)後の follow-up は最大 15 分。`ctx.waitUntil()` で初期応答後の処理継続を担保する。
+  - Discord の interaction callback data と follow-up webhook body は message `components` をサポートする。button は message 用 Action Row(type1)内の Button(type2)として送信し、custom_id を持つ非 Link/Premium button(style 1-4)のみが後続の message component interaction(type3)として戻る。
   - 署名検証・プロアクティブ送信は upstream infra-foundation の Agent/型/LLM 契約とは独立した「Worker エントリー層 + 純粋ヘルパー」で完結でき、infra-foundation の `Env`・ルーティングヘルパーを消費するだけで境界が閉じる。
 
 ## Research Log
@@ -21,12 +22,25 @@
   - プロアクティブ送信: `POST /users/@me/channels`(body `{recipient_id}`)で DM チャンネルを open → `POST /channels/{channel_id}/messages`。bot token は `Authorization: Bot {token}` ヘッダ。DM 不可ユーザーは 403(`Cannot send messages to this user`)。
 - **Implications**: Worker エントリーは raw body を一度だけ読み、検証後に JSON 解析する単一フローにする。deferred 後処理は `executionCtx.waitUntil()` で継続。follow-up とプロアクティブ送信は同じ REST 呼び出し基盤(fetch ベース)に集約できる。
 
+### Message component button payload 契約
+- **Context**: `/checkin` 開始ハンドラが ephemeral prompt と `[入力する]` button を返す必要があるが、旧 `HandlerResult.reply` / `Followup` 契約は content と ephemeral しか表現できなかった。
+- **Sources Consulted**:
+  - [Discord Developer Docs: Component Reference](https://docs.discord.com/developers/components/reference)
+  - [Discord Developer Docs: Receiving and Responding to Interactions](https://docs.discord.com/developers/interactions/receiving-and-responding)
+- **Findings**:
+  - Interaction callback data の message body は `components` を持てる。follow-up message も webhook message として components を送れる。
+  - Button は message でのみ使える interactive component で、Action Row(type1)または Section accessory に配置する。MVP では legacy action row 形式を採用する。
+  - custom_id は開発者定義の 1-100 文字で、ユーザーが component を操作した際に interaction payload として返る。message 上の複数 component は custom_id を共有してはならない。
+  - Primary/Secondary/Success/Danger(style 1-4)は custom_id を必要とし、Link(style 5)と Premium(style 6)は custom_id を持たず app へ interaction を返さない。
+  - `DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE` の初期 callback data は実質 ephemeral flag のみを扱うべきで、components は deferred 後の edit original / follow-up message で送る。
+- **Implications**: `types.ts` に `MessageActionRow` / `MessageButton` / `MessageOptions` を追加し、`HandlerResult.reply` と `Followup.editOriginal/send` が同じ `MessageOptions.components` を受け取る設計にする。deferred 初期応答の components は非対応とし、button は本応答または追加 follow-up に載せる。button の custom_id と押下後の業務処理は下位機能スペックが所有する。
+
 ### ライブラリ選定(discord-interactions / discord-api-types / @discordjs/rest)
 - **Context**: brief.md が `discord-interactions` / `discord-api-types` / `@discordjs/rest`(または fetch)を提案。Workers ランタイム互換と最小依存を確認する。
 - **Findings**:
   - `discord-interactions`: `verifyKey`(Web Crypto 互換の Ed25519 検証ヘルパー)と type 定数を提供。Workers 上で動作実績あり。署名検証の自前実装(`crypto.subtle.verify('Ed25519', ...)`)も可能だが、検証ロジックは枯れたライブラリ採用が妥当(build-vs-adopt → adopt)。
   - `discord-api-types`: 型のみ(ランタイムコストゼロ)。interaction payload・REST body の型安全に有用。採用。
-  - `@discardjs/rest`: full discord.js とは別パッケージで REST のみ。ただし Worker では `fetch` 直叩きで十分かつ依存最小。MVP は `fetch` ベースの薄い REST クライアントを自前実装し、`discord-api-types` の型で固める(simplification)。
+  - `@discordjs/rest`: full discord.js とは別パッケージで REST のみ。ただし Worker では `fetch` 直叩きで十分かつ依存最小。MVP は `fetch` ベースの薄い REST クライアントを自前実装し、`discord-api-types` の型で固める(simplification)。
 - **Implications**: 採用 = `discord-interactions`(検証)+ `discord-api-types`(型)。REST は `fetch` ベースの薄い内部クライアント。full `discord.js` は不使用(roadmap 制約)。
 
 ### infra-foundation 契約の消費点
@@ -68,6 +82,17 @@
 - **Trade-offs**: レート制限の高度な扱いは持たない(MVP 規模で許容)。
 - **Follow-up**: 429 応答時の最小リトライ要否は実装時に確認(MVP は単純伝播で開始)。
 
+### Decision: message component button は `MessageOptions.components` に集約
+- **Context**: 即時 reply と deferred 後の follow-up の両方で button を送る必要がある(Req 4.8, 4.9)。
+- **Alternatives Considered**:
+  1. `HandlerResult.reply` と `Followup` に別々の components 型を追加する
+  2. 共通の `MessageOptions` を導入して reply / follow-up / REST body で共有する
+  3. Discord payload 型を各下位ハンドラへ直接露出する
+- **Selected Approach**: `MessageOptions` に `ephemeral?: boolean` と `components?: MessageActionRow[]` を持たせ、`HandlerResult.reply.components` と `Followup.editOriginal/send(content, opts)` で同じ message component 契約を使う。`MessageButton` は custom_id を持つ style 1-4 に限定する。
+- **Rationale**: reply と follow-up はどちらも Discord message body を作るため、同一契約にすると実装とテストが重複しない。Link/Premium button を除外することで、custom_id ディスパッチへ戻る button だけを扱える。
+- **Trade-offs**: URL button 等の汎用 Discord components は扱わない。現行 requirements は custom_id ディスパッチを前提とするため許容。
+- **Follow-up**: 実装時は `discord-api-types` の `APIActionRowComponent<APIButtonComponent>` と構造互換であることを型テストまたはコンパイル時検証で固定する。
+
 ### Decision: プライバシー(§15)はコンテキストとヘルパーで構造的に強制
 - **Context**: 個人評価データは DM/個人用非公開チャンネル限定(Req 5, 6)。
 - **Selected Approach**: ハンドラへ渡すコンテキストに実行ユーザー ID を必須で含め、プロアクティブ送信ヘルパーは DM open → 失敗時に「指定された個人用フォールバックチャンネル」へのみフォールバックする。公開チャンネル宛の任意送信 API を公開しない。ephemeral 送信手段を応答ヘルパーに用意。
@@ -80,9 +105,11 @@
 - follow-up token 失効(15 分超の処理) — MVP の LLM 処理は数十秒想定で逸脱しない。失効時は送信ヘルパーが失敗を返し呼び出し元が判別。
 - DM 不可ユーザー(403)で通知が届かない — フォールバックチャンネル指定でカバー。未指定時は失敗を返す(Req 5.3)。
 - ハンドラ未登録 interaction — レジストリ未ヒット時に判別可能なエラー応答(Req 3.4)。
+- button custom_id の重複や長さ超過 — gateway 型では custom_id 必須を固定し、重複/命名規約は custom_id を所有する下位機能スペックのテストで担保する。必要なら将来 gateway 側に軽量検証を追加する。
 
 ## References
 - goal-agent-spec.md §7 / §14 / §15 — Discord インターフェイス・Message UX・プライバシー(authoritative)
 - `.kiro/specs/infra-foundation/design.md` — `Env`・ルーティングヘルパー・共有型契約
-- Discord Developer Docs: Interactions(Receiving and Responding)・Message Components・Webhook Execute/Edit
+- [Discord Developer Docs: Receiving and Responding to Interactions](https://docs.discord.com/developers/interactions/receiving-and-responding) — interaction callback data / follow-up webhook / 3 秒・15 分制約
+- [Discord Developer Docs: Component Reference](https://docs.discord.com/developers/components/reference) — Action Row / Button / custom_id / button style
 - `discord-interactions`(verifyKey)・`discord-api-types`(型)

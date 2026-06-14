@@ -6,9 +6,9 @@
 利用者(=下位スペック goal-management / checkin-classification / status-and-draft / notifications の実装者、および Worker を登録・運用する運用者)が観測できる契約として、(a) 署名検証付き interactions エンドポイント、(b) slash command 登録手段、(c) interaction 種別ディスパッチ、(d) deferred + follow-up パターン、(e) プロアクティブ送信ヘルパーを提供する。本ゲートウェイは個別コマンドのビジネスロジック・UX 文言・通知スケジュール・永続化スキーマを所有せず、上流 infra-foundation が確立した Agent トポロジ・共有型・LLM クライアントを消費する。プライバシー要件(仕様書 §15: DM/個人用非公開チャンネル限定)を構造的に強制する。
 
 ## Boundary Context
-- **In scope**: Ed25519 署名検証、PING(type1)→PONG(type1)、slash command 登録手段、interaction 種別(application command / modal submit / message component)のディスパッチ規約、3秒以内の deferred 応答(type5)と follow-up webhook による本応答送信パターン、modal を開く応答(type9)、bot token を用いたプロアクティブ送信ヘルパー(DM チャンネル open → メッセージ送信、DM 失敗時のチャンネルフォールバック)、プライバシー前提(DM/個人用非公開チャンネル限定)の構造的強制。
+- **In scope**: Ed25519 署名検証、PING(type1)→PONG(type1)、slash command 登録手段、interaction 種別(application command / modal submit / message component)のディスパッチ規約、3秒以内の deferred 応答(type5)と follow-up webhook による本応答送信パターン、即時応答および follow-up に message component button を載せる契約、modal を開く応答(type9)、bot token を用いたプロアクティブ送信ヘルパー(DM チャンネル open → メッセージ送信、DM 失敗時のチャンネルフォールバック)、プライバシー前提(DM/個人用非公開チャンネル限定)の構造的強制。
 - **Out of scope**: 個別 slash command(/cycle, /goal, /checkin, /status, /draft, /evidence delete 等)のビジネスロジック・引数定義の内容・UX 文言(各機能スペックが所有)、`this.schedule()` による通知トリガのスケジューリング(notifications が所有。本スペックは送信ヘルパーのみ提供)、永続化スキーマ・Agent トポロジ・LLM クライアント実装(infra-foundation が所有)。
-- **Adjacent expectations**: 本ゲートウェイは infra-foundation が公開する Agent 取得/ルーティングヘルパー・共有型・`Env` バインディングを再定義せず利用する。各機能スペックは本ゲートウェイが定めるディスパッチ規約・deferred/follow-up パターン・送信ヘルパーに従ってコマンド処理を実装し、署名検証や Discord 応答プロトコルを再実装しないことを前提とする。コマンド定義(名前・引数スキーマ)は各機能スペックが供給し、本ゲートウェイは登録手段と登録対象の受け口のみを提供する。
+- **Adjacent expectations**: 本ゲートウェイは infra-foundation が公開する Agent 取得/ルーティングヘルパー・共有型・`Env` バインディングを再定義せず利用する。各機能スペックは本ゲートウェイが定めるディスパッチ規約・deferred/follow-up パターン・送信ヘルパーに従ってコマンド処理を実装し、署名検証や Discord 応答プロトコルを再実装しないことを前提とする。コマンド定義(名前・引数スキーマ)および button の custom_id・表示文言・押下後の業務処理は各機能スペックが供給し、本ゲートウェイは登録手段と登録対象の受け口、および応答に button を含める共通契約のみを提供する。
 
 ## Requirements
 
@@ -44,8 +44,8 @@
 5. The ゲートウェイ shall 各ハンドラに対し、対応する interaction の内容(コマンド名・引数・custom_id・実行ユーザー・チャンネル/DM 文脈)を提供する。
 6. The ゲートウェイ shall 各機能スペックがハンドラを識別子(コマンド名・custom_id)に対応付けて登録できる規約を提供する。
 
-### Requirement 4: deferred 応答と follow-up パターン
-**Objective:** As a 基盤利用者, I want 3秒以内に deferred 応答を返し重い処理後に本応答を送る共通パターン, so that LLM 呼び出し等の長い処理を伴うコマンドが Discord のタイムアウトに違反せず応答できる
+### Requirement 4: deferred 応答・follow-up・message component button パターン
+**Objective:** As a 基盤利用者, I want 3秒以内に deferred 応答を返し重い処理後に本応答を送り、必要な応答には message component button を載せられる共通パターン, so that LLM 呼び出し等の長い処理を伴うコマンドや確認操作が Discord のタイムアウトに違反せず応答できる
 
 #### Acceptance Criteria
 1. Where ハンドラが即時に完了できない処理(LLM 呼び出し等)を伴うと宣言する, the ゲートウェイ shall 3秒以内に deferred 応答(type5: DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE)を返す。
@@ -55,6 +55,10 @@
 5. Where ハンドラが即時に応答できる軽量処理である, the ゲートウェイ shall deferred を経由せず即時応答(type4: CHANNEL_MESSAGE_WITH_SOURCE)を返せる手段を提供する。
 6. Where 応答を本人にのみ表示すべき場合, the ゲートウェイ shall 応答を ephemeral(本人のみ可視)として送信できる手段を提供する。
 7. Where ハンドラが application command または message component への応答として入力フォーム(modal)を開くことを宣言する, the ゲートウェイ shall Discord interaction response type9(MODAL)を初期応答として返し、ハンドラが指定した custom_id・タイトル・入力フィールド(action row 内の text input)を modal payload として送出する。
+8. Where ハンドラが即時応答に message component button を含めることを宣言する, the ゲートウェイ shall 応答本文とともにハンドラが指定した button の custom_id・表示ラベル・スタイル・有効/無効状態を送出する。
+9. Where ハンドラが deferred 後の本応答または追加 follow-up に message component button を含めることを宣言する, the ゲートウェイ shall follow-up メッセージ本文とともにハンドラが指定した button の custom_id・表示ラベル・スタイル・有効/無効状態を送出する。
+10. When message component button を含む応答が利用者に表示される, the ゲートウェイ shall その button が後続の message component interaction として同じ custom_id ディスパッチ規約で処理されるようにする。
+11. The ゲートウェイ shall 各機能スペックが button の custom_id・表示ラベル・押下後の業務処理を所有できるようにし、ゲートウェイ自身は button 固有の業務判断を実装しない。
 
 ### Requirement 5: プロアクティブメッセージ送信ヘルパー
 **Objective:** As a 基盤利用者(notifications 実装者等), I want bot token で DM/チャンネルへプロアクティブに送信するヘルパー, so that interaction 以外の契機(週次通知・アラート)でユーザーへメッセージを届けられる

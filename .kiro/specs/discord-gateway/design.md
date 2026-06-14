@@ -2,17 +2,17 @@
 
 ## Overview
 
-**Purpose**: 本スペックは評価目標フォロー Agent の全機能が共有する Discord 入出力ゲートウェイを提供する。Discord の slash command / modal submit / message component(button)はすべて HTTP POST で Cloudflare Worker に届くため、Ed25519 署名検証・PING/PONG・3秒以内の deferred 応答・follow-up webhook・プロアクティブ REST 送信という「Discord I/O 規約」を単一の共通基盤として確立し、各機能スペックがコマンド処理だけに集中できるようにする。
+**Purpose**: 本スペックは評価目標フォロー Agent の全機能が共有する Discord 入出力ゲートウェイを提供する。Discord の slash command / modal submit / message component(button)はすべて HTTP POST で Cloudflare Worker に届くため、Ed25519 署名検証・PING/PONG・3秒以内の deferred 応答・button 付き reply/follow-up webhook・プロアクティブ REST 送信という「Discord I/O 規約」を単一の共通基盤として確立し、各機能スペックがコマンド処理だけに集中できるようにする。
 
 **Users**: 直接の利用者は下位スペック(goal-management, checkin-classification, status-and-draft, notifications)の実装者と、Discord アプリ/コマンドを登録・運用する運用者である。本ゲートウェイはエンドユーザー向けのコマンド内容そのものを持たず、コマンドが乗る I/O 規約のみを提供する。
 
-**Impact**: グリーンフィールド。infra-foundation が確立した Worker エントリー(`src/index.ts`)・`Env`・Agent ルーティングヘルパー・共有型の上に、Discord interactions パスとプロアクティブ送信経路を統合する。永続化スキーマ・Agent トポロジ・LLM クライアントは再定義せず消費する。
+**Impact**: 既存 discord-gateway 契約を拡張する。infra-foundation が確立した Worker エントリー(`src/index.ts`)・`Env`・Agent ルーティングヘルパー・共有型の上に、Discord interactions パス、message component button 付き応答、プロアクティブ送信経路を統合する。永続化スキーマ・Agent トポロジ・LLM クライアントは再定義せず消費する。
 
 ### Goals
 - Ed25519 署名検証と PING→PONG を正しく処理し、Discord エンドポイント登録が通る interactions エントリを確立する(Req 1)。
 - 各機能スペックがコマンド定義を供給して登録できる slash command 登録手段を提供する(Req 2)。
 - interaction を種別(command / message component / modal submit)で登録ハンドラへ振り分けるディスパッチ規約を提供する(Req 3)。
-- 3秒以内 deferred + follow-up の共通パターンと ephemeral/即時応答手段、modal を開く応答(type9)を提供する(Req 4)。
+- 3秒以内 deferred + follow-up の共通パターン、ephemeral/即時応答手段、message component button 付き応答、modal を開く応答(type9)を提供する(Req 4)。
 - DM open → 送信 → 失敗時フォールバックのプロアクティブ送信ヘルパーを提供する(Req 5)。
 - プライバシー前提(DM/個人用非公開限定)を構造的に強制する(Req 6)。
 
@@ -27,7 +27,7 @@
 ### This Spec Owns
 - Discord interactions エントリ: raw body 取得、Ed25519 署名検証、PING→PONG、署名済み非 PING の種別判定とディスパッチ。
 - ディスパッチ規約: コマンド名 / custom_id をキーにしたハンドラレジストリと、ハンドラへ渡す `InteractionContext`(実行ユーザー・コマンド名・引数・custom_id・チャンネル/DM 文脈)の契約。
-- 応答ユーティリティ: 即時応答(type4)・deferred 応答(type5)・modal を開く応答(type9)・ephemeral・follow-up webhook(PATCH @original / POST follow-up)の生成と送信。
+- 応答ユーティリティ: 即時応答(type4)・deferred 応答(type5)・modal を開く応答(type9)・ephemeral・message component button・follow-up webhook(PATCH @original / POST follow-up)の生成と送信。
 - プロアクティブ送信ヘルパー: DM チャンネル open → メッセージ送信 → 403 時の個人用フォールバックチャンネル送信、失敗の判別可能な返却。
 - slash command 登録手段: 各機能が供給するコマンド定義集合を Discord API へ登録するスクリプト/エントリ(グローバル/ギルド単位)。
 - Discord 用 `Env` 拡張: `DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` / `DISCORD_BOT_TOKEN`(+ 任意のフォールバックチャンネル設定)の型宣言。
@@ -46,11 +46,12 @@
 
 ### Revalidation Triggers
 - `InteractionContext` / `InteractionHandler` 登録規約のシグネチャ変更(全下位ハンドラが影響)。
-- 応答ユーティリティ(deferred/follow-up/ephemeral)のインターフェイス変更。
+- 応答ユーティリティ(deferred/follow-up/ephemeral/message component button)のインターフェイス変更。
 - プロアクティブ送信ヘルパーの引数/返却型・フォールバック契約の変更。
 - Discord 用 `Env` バインディング名・secret 名の変更。
 - コマンド登録手段が受け取るコマンド定義集合の形の変更。
 - infra-foundation の `Env`・ルーティングヘルパーのシグネチャ変更(上流変更の波及)。
+- message component button の public contract(`MessageActionRow` / `MessageButton` / `MessageOptions`)の形、または button style の許容範囲の変更。
 
 ## Architecture
 
@@ -92,7 +93,7 @@ graph TB
 
 **Architecture Integration**:
 - Selected pattern: 薄いエントリー層 + レジストリ。署名検証・種別判定をゲートウェイに集約し、コマンド本体は各機能ハンドラへ委譲することで責務重複を排除。
-- Domain/feature boundaries: ゲートウェイは「検証・ディスパッチ・応答・送信」を所有。ハンドラは識別子をキーに登録される外部供給物として扱い、ゲートウェイはその内容を保持しない。
+- Domain/feature boundaries: ゲートウェイは「検証・ディスパッチ・応答・送信」と、message component button を Discord payload として表現する共通契約を所有する。button の custom_id・表示文言・押下後の業務判断は各機能ハンドラが所有し、ゲートウェイはその内容を保持しない。
 - New components rationale: 全コンポーネントは Discord I/O 規約の共通化に必要。投機的抽象(汎用イベントバス等)は導入しない。
 - Steering compliance: roadmap の「Discord deferred 応答はゲートウェイが提供し各機能が従う」「永続化/Agent/LLM は基盤が所有」に準拠。
 
@@ -103,7 +104,7 @@ graph TB
 | Backend / Services | Cloudflare Workers(`fetch` ハンドラ) | interactions 受信・ディスパッチ・REST 送信 | infra-foundation の `src/index.ts` に統合 |
 | Auth / Verify | `discord-interactions`(`verifyKey`) | Ed25519 署名検証・type 定数 | Workers/Web Crypto 互換。自前実装は不採用 |
 | Types | `discord-api-types` | interaction payload / REST body の型 | ランタイムコストゼロ(型のみ) |
-| Messaging | `fetch` ベース薄い Discord REST クライアント | follow-up webhook・プロアクティブ送信 | `@discordjs/rest`・full `discord.js` は不使用 |
+| Messaging | `fetch` ベース薄い Discord REST クライアント | follow-up webhook・message components・プロアクティブ送信 | `@discordjs/rest`・full `discord.js` は不使用 |
 | Runtime | `ExecutionContext.waitUntil` | deferred 後処理の継続 | 3秒応答後の重い処理を吸収 |
 
 ## File Structure Plan
@@ -114,14 +115,14 @@ src/
 ├── index.ts                         # (Modified) infra のエントリーに Discord interactions パス統合を追加
 └── discord/
     ├── env.ts                       # Discord 用 Env 拡張型: DISCORD_PUBLIC_KEY/APPLICATION_ID/BOT_TOKEN/フォールバックチャンネル(Req 1.5, 2.2, 5.4, 6.3)
-    ├── types.ts                     # InteractionContext / InteractionHandler / ハンドラ結果型 / 種別判別(Req 3.5, 3.6, 4.1)
+    ├── types.ts                     # InteractionContext / InteractionHandler / HandlerResult / MessageOptions / MessageActionRow / MessageButton / 種別判別(Req 3.5, 3.6, 4.1, 4.8-4.11)
     ├── verify.ts                    # raw body + 署名ヘッダの Ed25519 検証、欠落/失敗の判別(Req 1.1-1.3, 1.5)
-    ├── response.ts                  # PONG/即時(type4)/deferred(type5)/modal(type9)/ephemeral 応答ボディ生成(Req 1.4, 4.1, 4.5, 4.6, 4.7, 6.2)
-    ├── rest.ts                      # fetch ベース Discord REST クライアント: webhook 編集/送信・DM open・channel 送信(Req 4.2, 5.1, 5.4)
-    ├── followup.ts                  # follow-up 送信ユーティリティ(@original PATCH / 追加 POST、失敗判別)(Req 4.2, 4.4)
+    ├── response.ts                  # PONG/即時(type4)/deferred(type5)/modal(type9)/ephemeral/button 応答ボディ生成(Req 1.4, 4.1, 4.5-4.8, 4.10, 6.2)
+    ├── rest.ts                      # fetch ベース Discord REST クライアント: webhook 編集/送信(components 対応)・DM open・channel 送信(Req 4.2, 4.9, 5.1, 5.4)
+    ├── followup.ts                  # follow-up 送信ユーティリティ(@original PATCH / 追加 POST、components 対応、失敗判別)(Req 4.2, 4.4, 4.9)
     ├── proactive.ts                 # プロアクティブ送信ヘルパー: DM open→送信→403 フォールバック→失敗返却(Req 5.1-5.5, 6.3, 6.4)
     ├── registry.ts                  # コマンド名/custom_id をキーにしたハンドラレジストリと登録規約(Req 3.1-3.4, 3.6, 7.4)
-    ├── dispatch.ts                  # 検証済み interaction の種別判定→レジストリ照合→ハンドラ実行→deferred/modal 配線(Req 1.6, 3.1-3.5, 4.1-4.3, 4.7)
+    ├── dispatch.ts                  # 検証済み interaction の種別判定→レジストリ照合→ハンドラ実行→reply/deferred/modal/button 配線(Req 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10)
     └── commands/
         ├── definitions.ts           # 各機能が自分のコマンド定義を追加する単一集約点(空の集約配列)(Req 2.1, 2.5, 7.4)
         └── register.ts              # コマンド登録スクリプト: 認証情報検証→Discord API 登録(グローバル/ギルド)(Req 2.2-2.4)
@@ -165,17 +166,32 @@ sequenceDiagram
                     DP-->>D: 200 deferred (type5)
                     DP->>H: ctx.waitUntil(handler.run)
                     H->>F: follow-up PATCH @original / POST
-                    F-->>D: REST 送信(本応答/失敗通知)
+                    F-->>D: REST 送信(本応答/失敗通知/button 可)
                 else 即時応答
                     DP->>H: handler.run
-                    H-->>DP: type4 応答(ephemeral 可)
+                    H-->>DP: type4 応答(ephemeral/button 可)
                     DP-->>D: 200 応答
                 end
             end
         end
     end
 ```
-deferred 宣言の有無で初期応答(type5 vs type4)が分岐する。deferred 経路では初期 HTTP 応答後に `waitUntil` で処理を継続し、follow-up token(最大 15 分)内に REST で本応答を送る。
+deferred 宣言の有無で初期応答(type5 vs type4)が分岐する。deferred の初期応答(type5)には loading/ephemeral 以外の message body を載せず、button は `editOriginal` または追加 follow-up の message payload として送る。即時応答(type4)では `data.components` に action row/button を含められる。
+
+### message component button 応答フロー(reply / follow-up → component interaction)
+```mermaid
+sequenceDiagram
+    participant H as Feature Handler
+    participant DP as Dispatcher
+    participant R as Response Utility
+    participant D as Discord
+    H-->>DP: HandlerResult reply with components
+    DP->>R: reply(content, components)
+    R-->>D: type4 data components
+    D->>DP: type3 message component
+    DP->>H: lookup by custom_id
+```
+button は message 用 Action Row(type1)内の Button(type2)として表現する。非 Link/Premium の button だけを扱い、押下時に Discord が `custom_id` を持つ message component interaction(type3)を送る。custom_id の意味と押下後の処理は下位機能ハンドラが所有する。
 
 ### プロアクティブ送信フロー(DM → フォールバック)
 ```mermaid
@@ -220,6 +236,10 @@ sequenceDiagram
 | 4.5 | 即時応答手段 | response.ts | `reply` | 受信フロー |
 | 4.6, 6.2 | ephemeral 応答 | response.ts | `reply`/`deferred` (ephemeral flag) | 受信フロー |
 | 4.7 | modal を開く応答(type9) | response.ts, dispatch.ts, types.ts | `modal`, `HandlerResult({mode:"modal"})`, `dispatchInteraction` | 受信フロー |
+| 4.8 | 即時応答に button を含める | types.ts, response.ts, dispatch.ts | `MessageActionRow`, `MessageButton`, `reply` | button 応答フロー |
+| 4.9 | deferred 後の本応答/追加 follow-up に button を含める | types.ts, followup.ts, rest.ts | `MessageOptions`, `Followup.editOriginal`, `Followup.send` | button 応答フロー |
+| 4.10 | button 押下を同じ custom_id ディスパッチ規約へ戻す | dispatch.ts, registry.ts, types.ts | `InteractionKind:"component"`, `lookupHandler` | button 応答フロー |
+| 4.11 | button の業務判断を下位機能が所有 | types.ts, registry.ts, Boundary Commitments | `MessageButton.custom_id`, `InteractionHandler` | — |
 | 5.1, 5.4 | DM open→送信・bot token/REST | proactive.ts, rest.ts | `sendDirectMessage` | 送信フロー |
 | 5.2 | 403 フォールバック | proactive.ts | `sendDirectMessage` | 送信フロー |
 | 5.3 | フォールバック無しの失敗返却 | proactive.ts | `sendDirectMessage` | 送信フロー |
@@ -232,14 +252,14 @@ sequenceDiagram
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
 | Discord Env 拡張 | env | Discord secrets/設定の型宣言 | 1.5, 2.2, 5.4, 6.3 | infra Env (P0) | State |
-| Interaction 型・ハンドラ規約 | types | 文脈・ハンドラ・結果型 | 3.5, 3.6, 4.1, 6.1, 7.4 | discord-api-types (P1) | Service, State |
+| Interaction 型・ハンドラ規約 | types | 文脈・ハンドラ・結果型・button 契約 | 3.5, 3.6, 4.1, 4.8-4.11, 6.1, 7.4 | discord-api-types (P1) | Service, State |
 | Signature Verify | verify | Ed25519 検証 | 1.1, 1.2, 1.3, 1.5 | discord-interactions (P0), env (P0) | Service |
-| Response Utilities | response | 応答ボディ生成(PONG/type4/type5/type9 modal/ephemeral) | 1.4, 4.1, 4.5, 4.6, 4.7, 6.2 | types (P1) | Service |
-| Discord REST Client | rest | webhook/channel/DM REST 呼び出し | 4.2, 5.1, 5.4 | env (P0), fetch (P0) | Service |
-| Followup Utility | followup | follow-up 本応答/失敗送信 | 4.2, 4.4 | rest (P0), env (P0) | Service |
+| Response Utilities | response | 応答ボディ生成(PONG/type4/type5/type9 modal/ephemeral/button) | 1.4, 4.1, 4.5-4.8, 4.10, 6.2 | types (P1) | Service |
+| Discord REST Client | rest | webhook/channel/DM REST 呼び出し | 4.2, 4.9, 5.1, 5.4 | env (P0), fetch (P0) | Service |
+| Followup Utility | followup | follow-up 本応答/失敗送信/button 付き送信 | 4.2, 4.4, 4.9 | rest (P0), env (P0) | Service |
 | Proactive Send Helper | proactive | DM→フォールバック送信 | 5.1-5.5, 6.3, 6.4 | rest (P0), env (P0) | Service |
-| Handler Registry | registry | 識別子→ハンドラ対応付け | 3.1-3.4, 3.6, 7.4 | types (P0) | Service, State |
-| Interaction Dispatcher | dispatch | 種別判定→照合→実行→deferred/modal 配線 | 1.6, 3.1-3.5, 4.1-4.3, 4.7 | registry (P0), response (P0), types (P0) | Service |
+| Handler Registry | registry | 識別子→ハンドラ対応付け | 3.1-3.4, 3.6, 4.10, 7.4 | types (P0) | Service, State |
+| Interaction Dispatcher | dispatch | 種別判定→照合→実行→reply/deferred/modal/button 配線 | 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10 | registry (P0), response (P0), types (P0) | Service |
 | Command Definitions | commands | コマンド定義の単一集約点 | 2.1, 2.5, 7.4 | types (P1) | State |
 | Command Register | commands | 登録スクリプト | 2.2, 2.3, 2.4 | env (P0), definitions (P0) | Service, Batch |
 | Worker Entry 統合 | worker | interactions パス統合 | 1.4, 1.6 | verify (P0), dispatch (P0), infra index (P0) | API |
@@ -251,11 +271,13 @@ sequenceDiagram
 | Field | Detail |
 |-------|--------|
 | Intent | ハンドラへ渡す文脈と登録規約・結果型を定義 |
-| Requirements | 3.5, 3.6, 4.1, 6.1, 7.4 |
+| Requirements | 3.5, 3.6, 4.1, 4.8-4.11, 6.1, 7.4 |
 
 **Responsibilities & Constraints**
 - 実行ユーザー ID・コマンド名・引数・custom_id・チャンネル/DM 文脈を含む `InteractionContext` を定義(Req 3.5, 6.1)。
 - ハンドラは「即時応答型(reply)」「deferred 型」「modal を開く型(modal)」のいずれかを宣言できる(Req 4.1, 4.7)。
+- `reply` と `Followup` は同じ `MessageOptions` を用い、ephemeral と message component button を同じ契約で表現する(Req 4.6, 4.8, 4.9)。
+- `MessageButton` は押下後に interaction を返す非 Link/Premium button(style 1-4)のみを扱う。URL button / premium button は custom_id ディスパッチに戻らないため本契約に含めない(Req 4.10, 4.11)。
 - ゲートウェイはコマンドの中身を持たず、ハンドラは外部供給物として型で受ける(Req 7.4)。
 
 **Dependencies**
@@ -279,8 +301,33 @@ interface InteractionContext {
   readonly raw: unknown;          // 元 interaction(型は discord-api-types で絞り込み)
 }
 
+type MessageButtonStyle = 1 | 2 | 3 | 4; // Primary, Secondary, Success, Danger
+
+interface MessageButton {
+  type: 2;                         // Button
+  custom_id: string;                // 1-100 chars; 下位機能が所有
+  label: string;                    // max 80 chars; 下位機能が所有
+  style: MessageButtonStyle;
+  disabled?: boolean;
+}
+
+interface MessageActionRow {
+  type: 1;                         // ActionRow
+  components: MessageButton[];      // Discord 上限は最大 5 buttons per row
+}
+
+interface MessageOptions {
+  ephemeral?: boolean;
+  components?: MessageActionRow[];
+}
+
+interface Followup {
+  editOriginal(content: string, opts?: MessageOptions): Promise<SendResult>;
+  send(content: string, opts?: MessageOptions): Promise<SendResult>;
+}
+
 type HandlerResult =
-  | { mode: "reply"; ephemeral?: boolean; content: string }   // 即時(type4)
+  | { mode: "reply"; ephemeral?: boolean; content: string; components?: MessageActionRow[] } // 即時(type4)
   | { mode: "deferred"; ephemeral?: boolean; run: (followup: Followup) => Promise<void> }
   | { mode: "modal"; customId: string; title: string; components: ModalActionRow[] }; // modal を開く(type9)
 
@@ -308,8 +355,48 @@ interface InteractionHandler {
 }
 ```
 - Preconditions: `ctx` は署名検証済み interaction から構築される。
-- Postconditions: `deferred` の場合 `run` が follow-up を用いて本応答を送る責務を持つ。`modal` の場合ディスパッチャが Discord interaction response type9(MODAL)を初期応答として返す(Req 4.7)。
-- Invariants: `userId` は常に供給される(Req 6.1)。`modal` は command / component interaction の初期応答としてのみ有効(modal submit への再 modal 応答は行わない)。
+- Postconditions: `deferred` の場合 `run` が follow-up を用いて本応答を送る責務を持つ。button は deferred 初期応答ではなく `Followup.editOriginal` または `Followup.send` の `MessageOptions.components` で送る(Req 4.9)。`modal` の場合ディスパッチャが Discord interaction response type9(MODAL)を初期応答として返す(Req 4.7)。
+- Invariants: `userId` は常に供給される(Req 6.1)。`modal` は command / component interaction の初期応答としてのみ有効(modal submit への再 modal 応答は行わない)。同一 message 内で `custom_id` が重複しないことは button を定義する下位機能の責務だが、ゲートウェイの型は custom_id を必須にする。
+
+### response
+
+#### Response Utilities
+
+| Field | Detail |
+|-------|--------|
+| Intent | Discord interaction response body を生成する純粋関数群 |
+| Requirements | 1.4, 4.1, 4.5-4.8, 4.10, 6.2 |
+
+**Responsibilities & Constraints**
+- PONG(type1)、即時応答(type4)、deferred(type5)、modal(type9)の response body を生成する。
+- `reply` は `content` / `flags` / `components` を `data` に含められる。`components` は `MessageActionRow[]` をそのまま Discord message component payload として送出する(Req 4.8)。
+- `deferred` は Discord の制約に従い初期応答では ephemeral flag だけを扱う。button は deferred 後の webhook edit/send に載せる(Req 4.1, 4.9)。
+- `modal` は既存の `ModalActionRow[]` を modal payload として扱い、message button 用の `MessageActionRow[]` と混同しない。
+
+**Dependencies**
+- Inbound: dispatch — 応答生成(P0)
+- Outbound: types — `MessageOptions` / `ModalActionRow`(P0)
+- External: `discord-api-types` — response body 型(P1)
+
+**Contracts**: Service [x]
+
+##### Service Interface
+```typescript
+interface ResponseOptions extends MessageOptions {}
+
+declare function pong(): APIInteractionResponsePong;
+declare function reply(
+  content: string,
+  opts?: ResponseOptions,
+): APIInteractionResponseChannelMessageWithSource;
+declare function deferred(
+  opts?: Pick<ResponseOptions, "ephemeral">,
+): APIInteractionResponseDeferredChannelMessageWithSource;
+declare function modal(input: ModalInput): APIModalInteractionResponse;
+```
+- Preconditions: `reply` に渡す `components` は message 用 action row/button であり、modal 用 action row ではない。
+- Postconditions: `reply` は components 指定時に `data.components` を含む。`deferred` は components を受け取らない。
+- Invariants: button style は 1-4 に限定し、押下後に `custom_id` を持つ message component interaction(type3)へ戻る。
 
 ### verify
 
@@ -355,10 +442,10 @@ declare function verifyInteraction(
 | Field | Detail |
 |-------|--------|
 | Intent | 種別 + 識別子をキーにハンドラを登録・照合 |
-| Requirements | 3.1-3.4, 3.6, 7.4 |
+| Requirements | 3.1-3.4, 3.6, 4.10, 7.4 |
 
 **Responsibilities & Constraints**
-- `(kind, name)` をキーにハンドラを登録/照合(Req 3.6)。
+- `(kind, name)` をキーにハンドラを登録/照合(Req 3.6)。button 押下後の message component interaction は `kind:"component"` と button `custom_id` で照合する(Req 4.10)。
 - 同一キーの重複登録は検出可能(後勝ち禁止)。
 - ゲートウェイ自身はコマンドの中身を保持しない(Req 7.4)。
 
@@ -378,13 +465,14 @@ declare function lookupHandler(
 
 | Field | Detail |
 |-------|--------|
-| Intent | 検証済み interaction を種別判定し、照合・実行・deferred/modal 配線 |
-| Requirements | 1.6, 3.1-3.5, 4.1-4.3, 4.7 |
+| Intent | 検証済み interaction を種別判定し、照合・実行・reply/deferred/modal/button 配線 |
+| Requirements | 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10 |
 
 **Responsibilities & Constraints**
 - type2/3/5 を `command`/`component`/`modal` に判定し `InteractionContext` を構築(Req 3.1-3.3, 3.5, 6.1)。
 - レジストリ未ヒット時は判別可能なエラー応答(Req 3.4)。
-- `deferred` ハンドラは type5 を即返し、`ctx.waitUntil(run(followup))` で継続(Req 4.1, 4.3)。`reply` は type4 を返す(Req 4.5)。`modal` ハンドラは Discord interaction response type9(MODAL)を初期応答として返す(`customId`/`title`/`components` を modal payload に整形)(Req 4.7)。
+- `deferred` ハンドラは type5 を即返し、`ctx.waitUntil(run(followup))` で継続(Req 4.1, 4.3)。`reply` は type4 を返し、`components` があれば `response.reply` へ渡す(Req 4.5, 4.8)。`modal` ハンドラは Discord interaction response type9(MODAL)を初期応答として返す(`customId`/`title`/`components` を modal payload に整形)(Req 4.7)。
+- message component interaction(type3)は `data.custom_id` を `InteractionContext.name` として扱い、button 押下後も既存の custom_id ディスパッチ規約を使う(Req 4.10)。
 
 **Dependencies**
 - Inbound: Worker Entry(P0)
@@ -412,11 +500,11 @@ declare function dispatchInteraction(
 | Field | Detail |
 |-------|--------|
 | Intent | follow-up とプロアクティブ送信の REST 呼び出し |
-| Requirements | 4.2, 4.4, 5.1-5.5, 6.3, 6.4 |
+| Requirements | 4.2, 4.4, 4.9, 5.1-5.5, 6.3, 6.4 |
 
 **Responsibilities & Constraints**
-- `rest.ts`: `fetch` + `Authorization: Bot {token}` の薄いラッパ。webhook 編集/送信・DM open・channel 送信(Req 4.2, 5.1, 5.4)。
-- `followup.ts`: `editOriginal`(PATCH @original)と `sendFollowup`(POST)。失敗を判別可能に返す(Req 4.2, 4.4)。
+- `rest.ts`: `fetch` + `Authorization: Bot {token}` の薄いラッパ。webhook 編集/送信・DM open・channel 送信(Req 4.2, 4.9, 5.1, 5.4)。
+- `followup.ts`: `editOriginal`(PATCH @original)と `sendFollowup`(POST)。`MessageOptions.components` を webhook body の `components` に含め、失敗を判別可能に返す(Req 4.2, 4.4, 4.9)。
 - `proactive.ts`: DM open→送信→403 で個人用フォールバックチャンネル→未指定時は失敗返却。公開チャンネル宛任意送信を公開しない(Req 5.1-5.5, 6.3, 6.4)。
 
 **Dependencies**
@@ -428,8 +516,8 @@ declare function dispatchInteraction(
 ##### Service Interface
 ```typescript
 interface Followup {
-  editOriginal(content: string, opts?: { ephemeral?: boolean }): Promise<SendResult>;
-  send(content: string, opts?: { ephemeral?: boolean }): Promise<SendResult>;
+  editOriginal(content: string, opts?: MessageOptions): Promise<SendResult>;
+  send(content: string, opts?: MessageOptions): Promise<SendResult>;
 }
 
 type SendResult =
@@ -443,12 +531,12 @@ declare function sendDirectMessage(
   fallbackChannelId?: string,
 ): Promise<SendResult>;
 ```
-- Preconditions: token/application id は env から供給。
-- Postconditions: DM 403 かつ `fallbackChannelId` 指定時はフォールバック送信(Req 5.2)。未指定時は `forbidden` を返す(Req 5.3)。
+- Preconditions: token/application id は env から供給。`components` は message 用 Action Row/Button であり、modal 用 component を渡さない。
+- Postconditions: follow-up 送信は `MessageOptions.components` 指定時に JSON body の `components` を含める(Req 4.9)。DM 403 かつ `fallbackChannelId` 指定時はフォールバック送信(Req 5.2)。未指定時は `forbidden` を返す(Req 5.3)。
 - Invariants: 送信先は DM または指定された個人用フォールバックチャンネルに限定(Req 5.5, 6.3)。
 
 **Implementation Notes**
-- Integration: `followup` は dispatch の deferred 経路が `Followup` を生成して `run` に渡す。`sendDirectMessage` は notifications 等の呼び出し元が利用。
+- Integration: `followup` は dispatch の deferred 経路が `Followup` を生成して `run` に渡す。button 付き本応答は `followup.editOriginal("...", { components })`、追加 follow-up は `followup.send("...", { components })` で送る。`sendDirectMessage` は notifications 等の呼び出し元が利用。
 - Validation: 403 を `forbidden` に正規化。その他非 2xx は `rest_error`。
 - Risks: 429(レート制限)は MVP では `rest_error` として伝播(高度なリトライは対象外)。
 
@@ -494,7 +582,7 @@ declare function sendDirectMessage(
 
 ## Data Models
 
-本スペックは永続化スキーマを所有しない(infra-foundation 所有)。扱うのは Discord interaction の入出力契約(`InteractionContext` / `HandlerResult` / `SendResult`)のみで、これらは Components の Service Interface に定義済み。永続化される新規エンティティはない。
+本スペックは永続化スキーマを所有しない(infra-foundation 所有)。扱うのは Discord interaction の入出力契約(`InteractionContext` / `HandlerResult` / `MessageOptions` / `MessageActionRow` / `MessageButton` / `SendResult`)のみで、これらは Components の Service Interface に定義済み。永続化される新規エンティティはない。
 
 ## Error Handling
 
@@ -516,8 +604,9 @@ declare function sendDirectMessage(
 
 ### Unit Tests
 - `verifyInteraction`: 正しい署名で `ok:true`、改竄署名で `invalid_signature`、ヘッダ欠落で `missing_headers`(1.1, 1.2, 1.3)。
-- `response`: PING→PONG(type1)、`reply` が type4、`deferred` が type5、`modal` が type9(customId/title/action row 内 text input を含む payload)、ephemeral flag(64)付与(1.4, 4.1, 4.5, 4.6, 4.7)。
+- `response`: PING→PONG(type1)、`reply` が type4、`deferred` が type5、`modal` が type9(customId/title/action row 内 text input を含む payload)、ephemeral flag(64)付与、`reply` の `components` が `data.components` に入ること(1.4, 4.1, 4.5-4.8)。
 - `registry`: `(kind,name)` の登録/照合往復、未登録で `null`、重複登録検出(3.6, 7.4)。
+- `followup`: `editOriginal` / `send` が `MessageOptions.components` を webhook body に含めること、deferred 初期応答では components を送らないこと(4.1, 4.2, 4.9)。
 - `sendDirectMessage`: DM 成功で `ok`、403+fallback でフォールバック送信、403+fallback 無しで `forbidden`(5.1, 5.2, 5.3)。
 - `register`: 認証情報欠落時に登録せずエラー(2.3)。
 
@@ -525,6 +614,8 @@ declare function sendDirectMessage(
 - 検証→ディスパッチ: 署名済み command interaction が対応ハンドラへ振り分けられ type4 が返る(1.6, 3.1, 3.5)。
 - deferred 経路: deferred 宣言ハンドラで type5 が即返り、`waitUntil` 完了後に follow-up REST(@original PATCH)が呼ばれる(4.1, 4.2, 4.3)。
 - component/modal ディスパッチ: custom_id で各ハンドラへ振り分け(3.2, 3.3)。
+- button 付き即時応答: handler が `mode:"reply"` と `components` を返すと type4 応答に action row/button が含まれ、同じ button custom_id の type3 interaction が component handler へ振り分けられる(4.8, 4.10, 4.11)。
+- button 付き follow-up: deferred handler が `followup.editOriginal` / `send` に `components` を渡すと webhook body に action row/button が含まれる(4.9)。
 - modal を開く経路: command/component ハンドラが `mode:"modal"` を返すと type9(MODAL)応答が返り、payload に customId/title/text input が含まれる(4.7)。
 - 未登録 interaction: 判別可能なエラー応答が返る(3.4)。
 
@@ -535,4 +626,5 @@ declare function sendDirectMessage(
 ## Security Considerations
 - 署名検証(Ed25519)を全 interaction の前段に置き、未検証リクエストの処理を構造的に排除(Req 1、§15)。
 - プライバシー(§15、Req 6): 応答は ephemeral 手段を提供し、プロアクティブ送信は DM/個人用非公開チャンネルに限定。公開チャンネル宛の任意送信 API を公開しない。実行ユーザー ID をコンテキストへ必須供給し、各ハンドラが他ユーザーデータへアクセスしない前提を保つ(強制はハンドラ側のデータアクセスにも依存)。
+- message component button は custom_id を持つ非 Link/Premium button に限定する。外部 URL 遷移や purchase button は本ゲートウェイの custom_id ディスパッチ/プライバシー境界に戻らないため扱わない。
 - secrets(`DISCORD_PUBLIC_KEY`/`DISCORD_BOT_TOKEN`)は Worker 環境変数として管理し、コードに埋め込まない。
