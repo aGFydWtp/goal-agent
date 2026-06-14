@@ -43,6 +43,7 @@ export default defineConfig({
             "test/evaluation-cycle-agent.test.ts",
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
+            "test/worker-entry.test.ts",
           ],
         },
       },
