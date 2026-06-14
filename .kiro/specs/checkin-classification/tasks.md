@@ -42,7 +42,7 @@
   - _Boundary: Checkin Domain Operations_
   - _Depends: 1.1_
 
-- [ ] 2.2 分類実行ドメインメソッドを実装する
+- [x] 2.2 分類実行ドメインメソッドを実装する
   - goal-management の目標一覧取得で目標 + 達成条件を取得し、分類プロンプト → `LlmClient.completeJson` → 検証 を順に呼ぶ
   - 検証成功で pending 保持して結果を返し、`invalid_output`/検証失敗を分類失敗として返す(証跡は作らない)
   - 完了状態: 正常時に項目分解 + 候補目標(関連度スコア/理由)+ usefulness + 推奨タイトルを含む結果が返り pending が保持される、分類失敗時は失敗理由が返り何も永続化されないことを確認できる

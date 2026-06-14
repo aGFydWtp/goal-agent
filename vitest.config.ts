@@ -62,6 +62,8 @@ export default defineConfig({
             "test/checkin-classification-messages.test.ts",
             // チェックインドメイン操作(checkin-classification task 2.1)。対象サイクル解決と pending 揮発保持を検証する。
             "test/checkin-classification-checkin-operations.test.ts",
+            // 分類実行ドメインメソッド(checkin-classification task 2.2)。目標取得→LLM→検証→pending 保持を検証する。
+            "test/checkin-classification-classify-domain.test.ts",
             // サイクル作成ドメインロジック(goal-management task 2.1)。実 SQLite を async ラップして検証する。
             "test/goal-management-cycle-operations.test.ts",
             // 目標登録ドメインロジック(goal-management task 2.2)。対象サイクル解決と goals insert を検証する。
