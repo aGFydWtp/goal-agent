@@ -48,6 +48,8 @@ export default defineConfig({
             "test/discord-register-smoke.test.ts",
             // 入力検証ヘルパー(goal-management task 1.1)。日付/期間/必須項目の純粋ロジック。
             "test/goal-management-validation.test.ts",
+            // 所有者スコープ強制ヘルパー(goal-management task 1.2)。user_id 一致検証の純粋ロジック。
+            "test/goal-management-ownership.test.ts",
           ],
         },
       },
