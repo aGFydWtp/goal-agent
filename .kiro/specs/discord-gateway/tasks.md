@@ -100,7 +100,7 @@
   - _Depends: 2.1, 2.2, 3.2_
 
 - [ ] 5. Validation: 統合テストとスモーク
-- [ ] 5.1 検証〜ディスパッチ統合テスト
+- [x] 5.1 検証〜ディスパッチ統合テスト
   - 署名済み command/component/modal interaction が各対応ハンドラへ振り分けられること、未登録で判別可能エラーが返ることを検証する
   - deferred ハンドラで type5 即返後に follow-up REST(@original PATCH)が呼ばれること、即時ハンドラで type4 が返ること、modal ハンドラで type9(MODAL)応答(customId/title/text input を含む)が返ることを検証する
   - 完了状態: 上記ディスパッチ/deferred/modal/未登録パスの統合テストが通る

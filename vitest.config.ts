@@ -66,6 +66,8 @@ export default defineConfig({
             "test/worker-entry.test.ts",
             // interactions パスの Worker エントリー統合(task 4.1)。ExecutionContext を要するため workers。
             "test/discord-worker-interactions.test.ts",
+            // 検証〜ディスパッチ統合(task 5.1)。署名込み worker.fetch 経路 + 実 waitUntil 継続を workers で検証する。
+            "test/discord-dispatch-integration.test.ts",
             "test/integration.test.ts",
           ],
         },
