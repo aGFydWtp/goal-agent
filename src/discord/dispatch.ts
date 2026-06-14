@@ -71,6 +71,38 @@ function nameOf(kind: InteractionKind, interaction: APIInteraction): string | nu
 }
 
 /**
+ * command interaction の first-level subcommand / subcommand group 名を取り出す。
+ *
+ * slash command の options は `data.options[0]` 先頭が subcommand(option type 1)または
+ * subcommand group(option type 2)のとき、その `name` を結合キー
+ * (`"<top-level> <subcommand>"`、例 `"goal status"`)の構成に用いる。
+ *
+ * 比較は数値リテラル(1=Subcommand / 2=SubcommandGroup)で行う。`kindOf` と同様、
+ * `discord-api-types` の enum 値は workerd バンドル上で undefined に解決される既知の
+ * 不具合を避けるため、enum メンバではなく数値を直接比較する。
+ *
+ * スコープ(意図的に最小化): subcommand group の場合でも結合キーには first-level の
+ * group 名のみを用いる(group 配下の subcommand を `"<top-level> <group> <sub>"` まで
+ * 展開しない)。本ゲートウェイの解決対象(`goal status` / `evidence list` 等)は
+ * first-level 名で十分に区別でき、過度な入れ子展開は不要なため。
+ *
+ * command 以外の種別、または subcommand を伴わない command では `null` を返す。
+ */
+function subcommandName(interaction: APIInteraction): string | null {
+  const data = (interaction as { data?: { options?: unknown } }).data;
+  const options = data?.options;
+  if (!Array.isArray(options) || options.length === 0) {
+    return null;
+  }
+  const first = options[0] as { type?: unknown; name?: unknown };
+  // option type 1=Subcommand / 2=SubcommandGroup(数値直接比較 / enum 解決揺れ回避)。
+  if ((first.type === 1 || first.type === 2) && typeof first.name === "string") {
+    return first.name;
+  }
+  return null;
+}
+
+/**
  * 実行ユーザー ID を取り出す (Req 6.1)。DM は `interaction.user.id`、ギルドは
  * `interaction.member.user.id`。どちらか供給される側を採る。
  */
@@ -167,7 +199,14 @@ export async function dispatchInteraction(
     return errorResponse("この操作は受け付けられません。");
   }
 
-  const handler = lookupHandler(ctxResult.kind, ctxResult.name);
+  // command は最具体優先で解決する: まず結合キー `"<top-level> <subcommand>"`
+  // (例 `"goal status"`)を試し、未登録なら top-level キー(例 `"goal"`)へフォール
+  // バックする(後方互換)。component / modal は custom_id の完全 / 前方一致のみ(従来通り)。
+  // `ctx.name` は top-level 名のまま不変(既存ハンドラの ctx.name / ctx.raw 参照に影響しない)。
+  const sub = ctxResult.kind === "command" ? subcommandName(interaction as APIInteraction) : null;
+  const handler =
+    (sub !== null ? lookupHandler("command", `${ctxResult.name} ${sub}`) : null) ??
+    lookupHandler(ctxResult.kind, ctxResult.name);
   if (handler === null) {
     // 未登録ハンドラ: 判別可能なエラー応答(Req 3.4)。
     return errorResponse("この操作には対応していません。");
