@@ -9,6 +9,14 @@
 /** checkin 入力 modal の custom_id(modal submit ハンドラの照合キー)。 */
 export const CHECKIN_MODAL_ID = "checkin:modal";
 
+/**
+ * checkin 入力 modal が内包する複数行 TextInput フィールドの custom_id。
+ *
+ * [入力する] ボタンが開く modal にこのフィールドを 1 つ載せ、modal submit ハンドラ(task 3.2)
+ * がこの custom_id で raw テキストを読み取る。
+ */
+export const CHECKIN_INPUT_FIELD_ID = "checkin:input_field";
+
 /** [入力する] ボタンの custom_id。pendingId は不要。 */
 export const CHECKIN_INPUT_BUTTON_ID = "checkin:input";
 
