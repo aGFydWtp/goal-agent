@@ -16,7 +16,7 @@
   - _Requirements: 1.2, 1.4, 3.5_
   - _Boundary: Status Rules + Prompt + Schema + Verify_
 
-- [ ] 2.2 §13.2 LLM 見立てのプロンプト・出力スキーマ・検証・統合を実装する
+- [x] 2.2 §13.2 LLM 見立てのプロンプト・出力スキーマ・検証・統合を実装する
   - 目標定義・達成条件・マイルストーン・保存済み証跡・半期終了までの日数からプロンプトを組み立てる
   - status/reason/risks/nextActions の構造化出力型を定義し、completeJson 結果の構造・列挙・配列型を検証する
   - ルール候補と LLM 見立てを統合し、LLM 失敗/検証 NG 時はルール候補で status を成立させ見立て欠落を識別可能にする
