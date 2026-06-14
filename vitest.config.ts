@@ -54,6 +54,8 @@ export default defineConfig({
             "test/goal-management-commands.test.ts",
             // サイクル作成ドメインロジック(goal-management task 2.1)。実 SQLite を async ラップして検証する。
             "test/goal-management-cycle-operations.test.ts",
+            // 目標登録ドメインロジック(goal-management task 2.2)。対象サイクル解決と goals insert を検証する。
+            "test/goal-management-add-goal.test.ts",
           ],
         },
       },

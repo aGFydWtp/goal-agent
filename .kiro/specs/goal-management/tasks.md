@@ -30,7 +30,7 @@
   - _Boundary: Cycle Domain Operations_
   - _Depends: 1.2_
 
-- [ ] 2.2 目標登録ドメインロジックを実装(EvaluationCycleAgent メソッド)
+- [x] 2.2 目標登録ドメインロジックを実装(EvaluationCycleAgent メソッド)
   - 対象サイクル(実行ユーザー所有の最新サイクル)の存在を検証し、目標名・本文・達成条件(複数行)・評価観点(複数行)・期限を初期ステータス gray で Repository へ永続化する処理を実装する
   - 対象サイクルが存在しない場合は `no_cycle` を返す
   - 完了状態: サイクル存在時に `goals` 行が status='gray'・複数行の達成条件/評価観点付きで insert され、サイクル不存在時に `no_cycle` を返すユニットテストが通る

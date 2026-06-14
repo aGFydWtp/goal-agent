@@ -6,7 +6,7 @@
 // 本ファイルの純粋関数として実装し、Agent の汎用データ権威サーフェスを引数で消費する。
 // 後続タスク(2.2/2.3/2.4)が同一の `CycleDataAuthority`/`DomainDeps` 基盤を拡張する。
 
-import type { EntityName, EntityRow, EvaluationCycleRow } from "../../types";
+import type { EntityName, EntityRow, EvaluationCycleRow, GoalRow } from "../../types";
 
 /**
  * ドメイン関数が消費する最小の async データ権威インターフェイス。
@@ -92,4 +92,116 @@ export async function createCycle(
   };
   await authority.insertRow("evaluation_cycles", cycle);
   return { ok: true, cycle };
+}
+
+/**
+ * 対象サイクル決定規約: 実行ユーザーが所有する最新(`created_at` 最大)の評価サイクルを返す
+ * (tasks.md Implementation Notes / design L387)。
+ *
+ * 所有者スコープは `user_id` クエリで担保する(他ユーザーのサイクルは対象外)。
+ * 1 件も無ければ `null` を返す。`addGoal` などハンドラ起点の操作が cycleId を持たないため、
+ * 対象サイクルは本関数で内部解決する。下流スペックも本契約を消費する。
+ *
+ * @param authority サイクルデータ権威(list を消費)。
+ * @param userId 実行ユーザー(= 所有者)識別子。
+ * @returns 最新の所有サイクル行。1 件も無ければ `null`。
+ */
+export async function resolveActiveCycle(
+  authority: CycleDataAuthority,
+  userId: string,
+): Promise<EvaluationCycleRow | null> {
+  const rows = await authority.listRowsBy("evaluation_cycles", { user_id: userId });
+  let latest: EvaluationCycleRow | null = null;
+  for (const row of rows) {
+    if (latest === null || row.created_at > latest.created_at) {
+      latest = row;
+    }
+  }
+  return latest;
+}
+
+/**
+ * 目標登録の入力(design Service Interface `GoalInput`)。
+ *
+ * `dueDate` は §11.2 `goals` に専用列が無いため、永続化時に `evaluation_points` テキストへ
+ * 畳み込んで保持する(tasks.md Implementation Notes / design L386, L450)。
+ */
+export interface GoalInput {
+  /** 目標名(必須。空検証は handler 層 validation.ts 責務)。 */
+  title: string;
+  /** 目標本文(必須。空検証は handler 層 validation.ts 責務)。 */
+  description: string;
+  /** 達成条件。複数行 TEXT としてそのまま保持する(Req 2.4)。 */
+  successCriteria: string | null;
+  /** 評価観点。複数行 TEXT としてそのまま保持する(Req 2.4)。 */
+  evaluationPoints: string | null;
+  /** 期限。専用列が無いため `evaluation_points` 末尾へ畳み込む(Req 2.4)。 */
+  dueDate: string | null;
+}
+
+/** `addGoal` の結果型(design Service Interface)。 */
+export type AddGoalResult =
+  | { ok: true; goal: GoalRow }
+  | { ok: false; reason: "no_cycle" };
+
+/**
+ * `dueDate` を `evaluationPoints` 末尾へ畳み込む(design L386 dueDate 永続化規約)。
+ *
+ * - 評価観点あり + 期限あり → `${evaluationPoints}\n期限: ${dueDate}`
+ * - 評価観点なし + 期限あり → `期限: ${dueDate}`
+ * - 期限なし → `evaluationPoints`(null ならそのまま null)
+ */
+function foldDueDate(evaluationPoints: string | null, dueDate: string | null): string | null {
+  if (dueDate === null || dueDate === "") {
+    return evaluationPoints;
+  }
+  const dueLine = `期限: ${dueDate}`;
+  if (evaluationPoints === null || evaluationPoints === "") {
+    return dueLine;
+  }
+  return `${evaluationPoints}\n${dueLine}`;
+}
+
+/**
+ * 目標を対象サイクルへ登録して永続化する(Req 2.2, 2.4, 2.6, 2.8, 4.3, 5.3, 5.4)。
+ *
+ * 対象サイクル(実行ユーザー所有の最新サイクル)を `resolveActiveCycle` で内部解決し、
+ * 無ければ `no_cycle` を返す(Req 2.6)。存在時は実行ユーザーを所有者として付与し(Req 4.3)、
+ * 初期ステータス `'gray'`(Req 2.8)・複数行の達成条件/評価観点(Req 2.4)・`dueDate` を畳み込んだ
+ * 評価観点で `GoalRow` を構築し、単一権威へ insert する(Req 2.2, 5.3)。共有型を再利用する(Req 5.4)。
+ *
+ * 注: 必須項目(目標名・本文)の空検証はハンドラ層(validation.ts)責務のため、本関数では行わない。
+ *
+ * @param authority サイクルデータ権威(list / insert を消費)。
+ * @param deps ID / timestamp 生成の注入点。
+ * @param userId 実行ユーザー(= 所有者)識別子。
+ * @param fields 目標入力。
+ * @returns サイクル存在時は `{ ok: true, goal }`、不存在時は `{ ok: false, reason: "no_cycle" }`。
+ */
+export async function addGoal(
+  authority: CycleDataAuthority,
+  deps: DomainDeps,
+  userId: string,
+  fields: GoalInput,
+): Promise<AddGoalResult> {
+  const cycle = await resolveActiveCycle(authority, userId);
+  if (cycle === null) {
+    return { ok: false, reason: "no_cycle" };
+  }
+
+  const timestamp = deps.now();
+  const goal: GoalRow = {
+    id: deps.newId(),
+    cycle_id: cycle.id,
+    user_id: userId,
+    title: fields.title,
+    description: fields.description,
+    success_criteria: fields.successCriteria,
+    evaluation_points: foldDueDate(fields.evaluationPoints, fields.dueDate),
+    status: "gray",
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+  await authority.insertRow("goals", goal);
+  return { ok: true, goal };
 }
