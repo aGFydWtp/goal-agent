@@ -22,7 +22,7 @@ import type { LlmClient } from "../../llm/client";
 import type { EntityRow } from "../../types";
 import { buildStatusPrompt } from "../status/prompt";
 import { evaluateRules, type GoalStatusContext } from "../status/rules";
-import { statusVerdictLlmSchema, type StatusVerdict } from "../status/schema";
+import { type StatusVerdict, statusVerdictLlmSchema } from "../status/schema";
 import { combineVerdict } from "../status/verify";
 
 /**
@@ -171,10 +171,7 @@ export async function collectGoalContext(
  * 判断材料不足(ルール: Gray 候補かつ LLM 見立て欠落)は専用メッセージを足し、LLM 見立ての risks も
  * 不足点として併記する。重複は除去する。
  */
-function buildShortfalls(
-  ruleInsufficientMaterial: boolean,
-  verdict: StatusVerdict,
-): string[] {
+function buildShortfalls(ruleInsufficientMaterial: boolean, verdict: StatusVerdict): string[] {
   const shortfalls: string[] = [];
   if (verdict.reasonMissing && ruleInsufficientMaterial) {
     shortfalls.push("判断材料が不足しています(証跡・達成条件・目標定義を確認してください)");

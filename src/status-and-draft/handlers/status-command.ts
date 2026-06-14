@@ -15,11 +15,7 @@
 // 依存方向: handlers → messages / domain / goal-management(routing/domain) / llm factory(左方向のみ)。
 
 import type { DiscordEnv } from "../../discord/env";
-import type {
-  HandlerResult,
-  InteractionContext,
-  InteractionHandler,
-} from "../../discord/types";
+import type { HandlerResult, InteractionContext, InteractionHandler } from "../../discord/types";
 import {
   defaultDeps,
   listGoals,

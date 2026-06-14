@@ -13,11 +13,7 @@
 // 依存方向: handlers → messages / domain / goal-management routing(左方向のみ)。
 
 import type { DiscordEnv } from "../../discord/env";
-import type {
-  HandlerResult,
-  InteractionContext,
-  InteractionHandler,
-} from "../../discord/types";
+import type { HandlerResult, InteractionContext, InteractionHandler } from "../../discord/types";
 import { getUserCycleAuthority } from "../../goal-management/routing";
 import { listEvidenceWithLinks } from "../domain/evidence-view";
 import { formatEvidenceList } from "../messages";

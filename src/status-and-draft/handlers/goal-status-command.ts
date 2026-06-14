@@ -22,15 +22,8 @@ import type {
 } from "discord-api-types/v10";
 
 import type { DiscordEnv } from "../../discord/env";
-import type {
-  HandlerResult,
-  InteractionContext,
-  InteractionHandler,
-} from "../../discord/types";
-import {
-  defaultDeps,
-  resolveActiveCycle,
-} from "../../goal-management/domain/cycle-operations";
+import type { HandlerResult, InteractionContext, InteractionHandler } from "../../discord/types";
+import { defaultDeps, resolveActiveCycle } from "../../goal-management/domain/cycle-operations";
 import { getUserCycleAuthority } from "../../goal-management/routing";
 import { createLlmClient } from "../../llm/factory";
 import { GOAL_STATUS_OPT_GOAL, GOAL_STATUS_SUBCOMMAND } from "../commands";
