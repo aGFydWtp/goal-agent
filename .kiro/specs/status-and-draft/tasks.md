@@ -60,7 +60,7 @@
   - _Requirements: 4.1, 4.2, 4.4, 8.1_
   - _Boundary: Evidence View Operations_
 
-- [ ] 5.3 ドラフト生成・調整・保存ドメインメソッドと揮発 pending を実装する
+- [x] 5.3 ドラフト生成・調整・保存ドメインメソッドと揮発 pending を実装する
   - 対象証跡(目標単位は GoalAgent / 全体は EvaluationCycleAgent)を集約し、空証跡は証跡不足、生成成功で揮発 pending(draftPendingId 採番)として保持、生成失敗は保存せず失敗を返す
   - 調整は pending と所有者を検証して再生成・更新し、失敗時は直前 pending を保持する。pending 不在/別人は「見つからない」に正規化する
   - 保存は pending と所有者を検証し、本文・対象サイクル・対象目標(全体は目標未指定)・種別・所有者を伴って drafts へ書き込み、確定済みではなくドラフトとして保持する
