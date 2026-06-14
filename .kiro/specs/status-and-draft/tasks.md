@@ -80,7 +80,7 @@
   - _Boundary: Status Command Handler, Goal Status Command Handler, Evidence List Command Handler_
   - _Depends: 4.1, 5.1, 5.2_
 
-- [ ] 6.2 ドラフトコマンド・調整ボタン・保存ボタンハンドラを実装する
+- [x] 6.2 ドラフトコマンド・調整ボタン・保存ボタンハンドラを実装する
   - `/draft goal|all` を deferred → 生成 → §8.7 ドラフト + 調整/保存ボタン follow-up とし、証跡不足/生成失敗/非所有を各々案内する
   - 調整ボタン4種を deferred → kind 再生成 → ボタン再提示とし、pending 別人/不在で操作不可、調整失敗で直前ドラフト維持を案内する
   - [保存]ボタンを保存 → 保存通知とし、pending 別人/不在で保存しない。すべて本人のみが閲覧できる文脈で応答する
@@ -113,4 +113,6 @@
 - 2.2: design の `import { goalStatusSchema } from "../types/enums"` は未提供。`status/schema.ts` で `z.enum(GOAL_STATUSES)` からローカルに組む。`combineVerdict` は zod 済み LlmResult を信頼し再検証せず、`llm.ok:false`(全 LlmError kind)時は `rule.candidate` + 空 reason/risks/nextActions + `reasonMissing:true` を返す。
 - 2.2: design §13.2 は「マイルストーン」を入力に挙げるが `GoalStatusContext`(rules.ts)に milestone フィールドは無い。task 5.1 の `collectGoalContext` で必要なら追加する判断が要る。現状 `buildStatusPrompt` は既存フィールドのみ使用。
 - 3.1: `RefineKind`(="shorten"|"strengthen"|"clarify"|"manager")は `draft/schema.ts` が正規の export 元(後続 import 元)。task 1.1 の `custom-ids.ts` にも構造同一の alias が存在する(境界外のため未統合・型エラーなし)。`refineKindToDraftType`: null=self_evaluation / manager=manager_summary / shorten=short_summary / strengthen,clarify=self_evaluation。空証跡ガードは `buildDraftPrompt` ではなく task 5.3 の `generateDraft` が担う。
-- 環境: 本セッション中、作業ツリーに **並行する discord-gateway 実装ストリーム**(`src/discord/*`・`tsconfig.test.json`・`test/discord-*`)が混在。status-and-draft の各タスクは選択的ステージングで自タスクのファイルのみコミットすること。
+- 環境: 本セッション中、作業ツリーに **並行する discord-gateway / infra-foundation 実装ストリーム**(`src/discord/*`・`src/agents/*`・`tsconfig.test.json`・`vitest.config.ts`・`test/discord-*`・他 spec の tasks.md、および `status-operations.ts` への整形リフロー)が混在。status-and-draft の各タスクは選択的ステージングで自タスクのファイルのみコミットすること。
+- ディスパッチャ拡張(6.x 前提・ユーザー承認済み): `/goal status`・`/evidence list` は goal-management 所有の `goal`/`evidence` トップレベルと衝突するため、`src/discord/dispatch.ts` を「`<top-level> <subcommand>` 結合キー優先 → 未登録ならトップレベル fallback」に後方互換拡張済み(commit 177913c)。`ctx.name` はトップレベルのまま。登録(6.3)は `registerHandler("command","goal status",...)` 等の結合キーで行う。
+- 6.2: 揮発 draft pending は **infra ephemeral KV**(committed infra task 4.5 の `putEphemeral`/`getEphemeral`/`deleteEphemeral`)へ persist/hydrate する。`/draft`・調整・保存は別 interaction のため Map では跨げない。`src/status-and-draft/routing.ts`(checkin/routing.ts のミラー)が bridge。design の「Agent インスタンスメモリ」表現はこの ephemeral-KV 方式に更新。5ボタン行(調整4+保存)は `handlers/draft-buttons.ts` の共有ヘルパーが組立。
