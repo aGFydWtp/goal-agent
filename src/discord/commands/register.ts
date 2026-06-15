@@ -52,7 +52,7 @@ export type MissingCredential = "DISCORD_APPLICATION_ID" | "DISCORD_BOT_TOKEN";
 export type RegisterResult =
   | { ok: true; scope: "global" | "guild"; count: number }
   | { ok: false; reason: "missing_credentials"; missing: MissingCredential[] }
-  | { ok: false; reason: "rest_error"; status: number };
+  | { ok: false; reason: "rest_error"; status: number; body: string };
 
 /**
  * 集約されたコマンド定義を Discord API へ bulk overwrite 登録する (Req 2.2, 2.3, 2.4)。
@@ -102,7 +102,7 @@ export async function registerCommands(
   });
 
   if (!res.ok) {
-    return { ok: false, reason: "rest_error", status: res.status };
+    return { ok: false, reason: "rest_error", status: res.status, body: await res.text() };
   }
 
   return {

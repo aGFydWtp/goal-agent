@@ -12,7 +12,7 @@
 import { InteractionResponseType, MessageFlags } from "discord-api-types/v10";
 import { describe, expect, it } from "vitest";
 import { deferred, modal, pong, reply } from "../src/discord/response";
-import type { ModalActionRow } from "../src/discord/types";
+import type { MessageActionRow, ModalActionRow } from "../src/discord/types";
 
 describe("response: enum 値が design 記載と一致する", () => {
   it("InteractionResponseType / MessageFlags が期待数値である", () => {
@@ -116,5 +116,42 @@ describe("modal (Req 4.7)", () => {
     const input = row.components[0]!;
     expect(input.type).toBe(4);
     expect(input.custom_id).toBe("field_note");
+  });
+});
+
+describe("reply: message component button(task 6.2, Req 4.8)", () => {
+  const row: MessageActionRow = {
+    type: 1,
+    components: [
+      { type: 2, custom_id: "btn:confirm", label: "確定", style: 1 },
+      { type: 2, custom_id: "btn:cancel", label: "取消", style: 4, disabled: true },
+    ],
+  };
+
+  it("components 指定で type4 応答の data.components に action row/button が含まれる", () => {
+    const body = reply("実行しますか?", { components: [row] });
+    expect(body.type).toBe(4);
+    expect(body.data.content).toBe("実行しますか?");
+    expect(body.data.components).toEqual([row]);
+  });
+
+  it("button style は 1-4(message button)で、modal の text input(type4 component)と混同しない", () => {
+    const body = reply("x", { components: [row] });
+    const rows = body.data.components as MessageActionRow[];
+    const btn = rows[0]!.components[0]!;
+    expect(rows[0]!.type).toBe(1); // ActionRow
+    expect(btn.type).toBe(2); // Button(modal の text input は type4)
+    expect(btn.style).toBe(1);
+  });
+
+  it("ephemeral と併用でき、flags(64)と components の双方が出力される", () => {
+    const body = reply("本人のみ", { ephemeral: true, components: [row] });
+    expect(body.data.flags).toBe(64);
+    expect(body.data.components).toEqual([row]);
+  });
+
+  it("components 未指定時は data.components を出力しない(純加算 / 既存挙動維持)", () => {
+    const body = reply("hello");
+    expect(body.data.components).toBeUndefined();
   });
 });

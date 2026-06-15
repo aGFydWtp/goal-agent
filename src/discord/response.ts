@@ -9,7 +9,7 @@ import type {
 } from "discord-api-types/v10";
 import { InteractionResponseFlags, InteractionResponseType } from "discord-interactions";
 
-import type { HandlerResult } from "./types";
+import type { HandlerResult, MessageActionRow, MessageOptions } from "./types";
 
 /**
  * Discord interaction の応答ボディ生成ユーティリティ (Req 1.4, 4.1, 4.5, 4.6, 4.7, 6.2)。
@@ -64,18 +64,30 @@ export function pong(): APIInteractionResponsePong {
 }
 
 /**
- * 即時応答ボディ(type 4: CHANNEL_MESSAGE_WITH_SOURCE)を生成する (Req 4.5)。
+ * 即時応答ボディ(type 4: CHANNEL_MESSAGE_WITH_SOURCE)を生成する (Req 4.5, 4.8)。
  *
- * `ephemeral` 指定時は `data.flags` に 64 を立てる (Req 4.6, 6.2)。
+ * `ephemeral` 指定時は `data.flags` に 64 を立てる (Req 4.6, 6.2)。`components` 指定時は
+ * message 用 action row / button をそのまま `data.components` へ出力する (Req 4.8)。
+ * `components` は {@link MessageActionRow}[](button=type2)であり、modal 用の
+ * {@link import("./types").ModalActionRow}(text input=type4)とは型レベルで区別される。
  */
 export function reply(
   content: string,
-  opts?: ResponseOptions,
+  opts?: MessageOptions,
 ): APIInteractionResponseChannelMessageWithSource {
   const flags = ephemeralFlag(opts?.ephemeral);
+  const data: { content: string; flags?: number; components?: MessageActionRow[] } = { content };
+  if (flags !== undefined) {
+    data.flags = flags;
+  }
+  if (opts?.components !== undefined) {
+    data.components = opts.components;
+  }
   return {
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE as unknown as ApiResponseType.ChannelMessageWithSource,
-    data: flags === undefined ? { content } : { content, flags },
+    // data.components は MessageActionRow[](button payload)。discord-api-types の
+    // top-level component union とは構造的に互換(types.ts の compile-time assertion で担保)。
+    data: data as APIInteractionResponseChannelMessageWithSource["data"],
   };
 }
 

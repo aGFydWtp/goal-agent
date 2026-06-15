@@ -1,22 +1,22 @@
 # Implementation Plan
 
-- [ ] 1. 基盤: コマンド定義・custom_id 規約・登録の骨組み
-- [ ] 1.1 status-and-draft のコマンド定義と custom_id 規約を確立する
+- [x] 1. 基盤: コマンド定義・custom_id 規約・登録の骨組み
+- [x] 1.1 status-and-draft のコマンド定義と custom_id 規約を確立する
   - `/status`・`/goal status`(goal オプション)・`/evidence list`・`/draft`(goal オプション / all)の application command 定義を用意する
   - 調整ボタン4種([短くする]/[成果を強める]/[課題を明確にする]/[上司向けにする])と[保存]ボタンの custom_id 規約を定義し、draftPendingId と調整 kind を埋め込み・抽出できるようにする
   - 完了条件: コマンド定義オブジェクトと custom_id の組立/解析関数がエクスポートされ、kind と draftPendingId が往復で一致する
   - _Requirements: 2.1, 3.1, 4.1, 5.1, 5.2, 5.5, 6.1, 6.2, 6.3, 6.4, 7.1_
   - _Boundary: Command Definitions + Register, custom-ids.ts_
 
-- [ ] 2. コア: ステータス判定エンジン
-- [ ] 2.1 (P) §10.2 ルール前処理を実装する
+- [x] 2. コア: ステータス判定エンジン
+- [x] 2.1 (P) §10.2 ルール前処理を実装する
   - 目標コンテキスト(達成条件・評価観点・紐づく証跡・半期終了までの日数・最新証跡経過)から Green/Yellow/Red/Gray の候補状態を導く
   - 直近2週間以内の証跡有無、3週間以上証跡なし、達成条件の着手状況、半期終了の近さ、定義/証跡の不足を評価する
   - 完了条件: 直近2週内証跡で Green 候補、3週以上証跡なしで Red 候補、証跡少/達成条件未設定で Gray(判断材料不足フラグ)が返るユニットテストが通る
   - _Requirements: 1.2, 1.4, 3.5_
   - _Boundary: Status Rules + Prompt + Schema + Verify_
 
-- [ ] 2.2 §13.2 LLM 見立てのプロンプト・出力スキーマ・検証・統合を実装する
+- [x] 2.2 §13.2 LLM 見立てのプロンプト・出力スキーマ・検証・統合を実装する
   - 目標定義・達成条件・マイルストーン・保存済み証跡・半期終了までの日数からプロンプトを組み立てる
   - status/reason/risks/nextActions の構造化出力型を定義し、completeJson 結果の構造・列挙・配列型を検証する
   - ルール候補と LLM 見立てを統合し、LLM 失敗/検証 NG 時はルール候補で status を成立させ見立て欠落を識別可能にする
@@ -24,8 +24,8 @@
   - _Requirements: 1.1, 1.3, 1.5_
   - _Boundary: Status Rules + Prompt + Schema + Verify_
 
-- [ ] 3. コア: ドラフト生成エンジン
-- [ ] 3.1 (P) §13.3 ドラフト生成・調整プロンプトと出力スキーマ・検証を実装する
+- [x] 3. コア: ドラフト生成エンジン
+- [x] 3.1 (P) §13.3 ドラフト生成・調整プロンプトと出力スキーマ・検証を実装する
   - 対象証跡から事実/解釈/課題/次アクションを分離生成するプロンプトを組み立て、誇張抑制と「証跡にない内容は推測明示」を指示する
   - 4 種の調整(短縮/成果強調/課題明確化/上司向け)の再生成プロンプトを組み立て、成果強調でも事実を捏造しない指示を維持する
   - 4 セクション + 推測注記の構造化出力型と検証、調整 kind から drafts type への対応(初期=self_evaluation、上司向け=manager_summary、短縮=short_summary)を実装する
@@ -33,8 +33,8 @@
   - _Requirements: 5.1, 5.4, 5.7, 6.1, 6.2, 6.3, 6.4, 7.2_
   - _Boundary: Draft Prompt + Schema + Verify_
 
-- [ ] 4. コア: メッセージ整形
-- [ ] 4.1 (P) §8.4/§8.5/§8.6/§8.7 の応答整形を実装する
+- [x] 4. コア: メッセージ整形
+- [x] 4.1 (P) §8.4/§8.5/§8.6/§8.7 の応答整形を実装する
   - 全目標の状態/理由 + 今週やるとよいことを §8.4 形式へ整形する
   - 単一目標の状態・見立て・証跡一覧・不足・次アクションを §8.5 形式へ整形する
   - 証跡 + 紐づく目標 + 評価への使いやすさ + 補足を §8.6 形式へ、証跡無しは未保存案内へ整形する
@@ -43,8 +43,8 @@
   - _Requirements: 2.2, 3.1, 4.1, 4.3, 5.5, 6.5_
   - _Boundary: Message Formatter_
 
-- [ ] 5. コア: Agent ドメインメソッド(判定・閲覧・ドラフト)
-- [ ] 5.1 ステータス判定ドメインメソッドを実装し再利用契約として公開する
+- [x] 5. コア: Agent ドメインメソッド(判定・閲覧・ドラフト)
+- [x] 5.1 ステータス判定ドメインメソッドを実装し再利用契約として公開する
   - GoalAgent に目標コンテキスト集約と単一目標判定(ルール → プロンプト → completeJson → 検証 → 統合)を実装し、所有者不一致/不存在を「見つからない」に正規化する
   - EvaluationCycleAgent に対象サイクル解決と全目標集約判定を実装する
   - 単一/全目標判定メソッドと判定結果型を、外部(notifications 想定)が Agent 取得経由で呼べる安定契約として公開する
@@ -53,14 +53,14 @@
   - _Boundary: Status Domain Operations_
   - _Depends: 2.1, 2.2_
 
-- [ ] 5.2 (P) 証跡閲覧ドメインメソッドを実装する
+- [x] 5.2 (P) 証跡閲覧ドメインメソッドを実装する
   - 実行ユーザー所有の証跡を取得し、証跡-目標リンクを介して紐づく目標名を解決して返す
   - 他ユーザーの証跡を含めず、証跡無しは空で返す(案内はメッセージ層)
   - 完了条件: 所有証跡が紐づく目標名付きで返り、非所有を含まず、証跡無しで空が返る結合テストが通る
   - _Requirements: 4.1, 4.2, 4.4, 8.1_
   - _Boundary: Evidence View Operations_
 
-- [ ] 5.3 ドラフト生成・調整・保存ドメインメソッドと揮発 pending を実装する
+- [x] 5.3 ドラフト生成・調整・保存ドメインメソッドと揮発 pending を実装する
   - 対象証跡(目標単位は GoalAgent / 全体は EvaluationCycleAgent)を集約し、空証跡は証跡不足、生成成功で揮発 pending(draftPendingId 採番)として保持、生成失敗は保存せず失敗を返す
   - 調整は pending と所有者を検証して再生成・更新し、失敗時は直前 pending を保持する。pending 不在/別人は「見つからない」に正規化する
   - 保存は pending と所有者を検証し、本文・対象サイクル・対象目標(全体は目標未指定)・種別・所有者を伴って drafts へ書き込み、確定済みではなくドラフトとして保持する
@@ -69,8 +69,8 @@
   - _Boundary: Draft Domain Operations_
   - _Depends: 3.1_
 
-- [ ] 6. 統合: ハンドラ実装と Discord ゲートウェイへの登録
-- [ ] 6.1 閲覧コマンドハンドラ(/status・/goal status・/evidence list)を実装する
+- [x] 6. 統合: ハンドラ実装と Discord ゲートウェイへの登録
+- [x] 6.1 閲覧コマンドハンドラ(/status・/goal status・/evidence list)を実装する
   - `/status` をサイクル/目標確認 → deferred → 全目標判定 → §8.4 follow-up とし、サイクル無し/目標無しを案内する
   - `/goal status` を deferred → 単一目標判定 + 証跡/不足/次アクション → §8.5 follow-up とし、非所有/不存在を「見つからない」にする
   - `/evidence list` を所有者スコープ証跡取得 → §8.6 即時 ephemeral 応答とし、証跡無しを案内する
@@ -80,7 +80,7 @@
   - _Boundary: Status Command Handler, Goal Status Command Handler, Evidence List Command Handler_
   - _Depends: 4.1, 5.1, 5.2_
 
-- [ ] 6.2 ドラフトコマンド・調整ボタン・保存ボタンハンドラを実装する
+- [x] 6.2 ドラフトコマンド・調整ボタン・保存ボタンハンドラを実装する
   - `/draft goal|all` を deferred → 生成 → §8.7 ドラフト + 調整/保存ボタン follow-up とし、証跡不足/生成失敗/非所有を各々案内する
   - 調整ボタン4種を deferred → kind 再生成 → ボタン再提示とし、pending 別人/不在で操作不可、調整失敗で直前ドラフト維持を案内する
   - [保存]ボタンを保存 → 保存通知とし、pending 別人/不在で保存しない。すべて本人のみが閲覧できる文脈で応答する
@@ -89,7 +89,7 @@
   - _Boundary: Draft Command Handler, Refine / Save Draft Button Handlers_
   - _Depends: 1.1, 4.1, 5.3_
 
-- [ ] 6.3 全ハンドラを登録しコマンド定義を集約点へ追加する
+- [x] 6.3 全ハンドラを登録しコマンド定義を集約点へ追加する
   - 4 コマンドハンドラ・調整ボタン4種・保存ボタンを Discord ゲートウェイのレジストリへ規約適合で登録する
   - status-and-draft のコマンド定義をゲートウェイのコマンド定義集約点へ追加する
   - 完了条件: 登録後に各コマンド/ボタンの interaction が対応ハンドラへ振り分けられ、コマンド定義が登録対象集約に含まれる結合テストが通る
@@ -97,10 +97,22 @@
   - _Boundary: Command Definitions + Register, register.ts_
   - _Depends: 6.1, 6.2_
 
-- [ ] 7. 検証: クリティカルパスと再利用契約の E2E/スモーク
-- [ ] 7.1 クリティカルパスと notifications 再利用契約を検証する
+- [x] 7. 検証: クリティカルパスと再利用契約の E2E/スモーク
+- [x] 7.1 クリティカルパスと notifications 再利用契約を検証する
   - サイクル + 目標 + 証跡蓄積済み状態で `/status` → `/goal status` → `/evidence list` → `/draft goal` → 調整 → [保存] を通し、判定・閲覧・ドラフト保存が単一権威で成立することを確認する
   - 単一/全目標判定メソッドが Agent 取得経由で外部(notifications 想定)から呼べ判定結果型を返すこと、LLM 失敗時にルール候補で判定が成立し見立て欠落が識別できることを確認する
   - 完了条件: クリティカルパス E2E と再利用契約スモーク・LLM フォールバックが通り、drafts に保存行が確認できる
   - _Requirements: 1.5, 1.6, 7.5, 8.5_
   - _Depends: 6.3_
+
+## Implementation Notes
+- 1.1: テスト登録は `vitest.config.ts` の node プロジェクトを glob 化済み(`include: ["test/**/*.test.ts"]` + workers のみ exclude)。新規 node テストは `test/*.test.ts` に置けば自動実行され、config 編集は不要(共有 config の競合回避)。workers ランタイムテストを追加する場合のみ exclude へ追記する。
+- 1.1: ドメイン操作は `src/status-and-draft/domain/*.ts` の純粋関数として実装し、`src/goal-management/domain/cycle-operations.ts` の `CycleDataAuthority`/`DomainDeps`/`resolveActiveCycle`/`listGoals`/`getGoal` を消費する。**`src/agents/*.ts`(GoalAgent/EvaluationCycleAgent)は変更しない** — design「Modified Files: agents/*.ts」は確立済みの純粋関数パターン(goal-management/checkin と同型)に置き換わる。揮発 pending は Map ベースの store + `DomainDeps.newId()/now()` で保持(checkin の `checkin-operations.ts` 参照)。
+- 1.1: LLM は `llm.completeJson(req, zodSchema)` → `LlmResult<T>`(`{ok:true,value}` / `{ok:false,error:{kind}}`、`invalid_output` で検証 NG)。zod スキーマは `src/{feature}/.../schema.ts` に所有。`GoalStatus`/`DraftType` の zod は未提供のため `z.enum(GOAL_STATUSES)`/`z.enum(DRAFT_TYPES)`(`src/types/enums.ts` の const タプル)から組む。
+- 1.1: discord dispatcher はトップレベルコマンド名のみでハンドラ解決。`/goal status`・`/evidence list` は goal-management 所有の `goal`/`evidence` トップレベルと衝突するため、登録(task 6.x)で既存定義へ `status`/`list` サブコマンドを統合する必要がある。1.1 ではサブコマンド/オプション名の定数 export に留め、`statusAndDraftCommandDefinitions` には `/status`・`/draft` のみ含めた。
+- 2.2: design の `import { goalStatusSchema } from "../types/enums"` は未提供。`status/schema.ts` で `z.enum(GOAL_STATUSES)` からローカルに組む。`combineVerdict` は zod 済み LlmResult を信頼し再検証せず、`llm.ok:false`(全 LlmError kind)時は `rule.candidate` + 空 reason/risks/nextActions + `reasonMissing:true` を返す。
+- 2.2: design §13.2 は「マイルストーン」を入力に挙げるが `GoalStatusContext`(rules.ts)に milestone フィールドは無い。task 5.1 の `collectGoalContext` で必要なら追加する判断が要る。現状 `buildStatusPrompt` は既存フィールドのみ使用。
+- 3.1: `RefineKind`(="shorten"|"strengthen"|"clarify"|"manager")は `draft/schema.ts` が正規の export 元(後続 import 元)。task 1.1 の `custom-ids.ts` にも構造同一の alias が存在する(境界外のため未統合・型エラーなし)。`refineKindToDraftType`: null=self_evaluation / manager=manager_summary / shorten=short_summary / strengthen,clarify=self_evaluation。空証跡ガードは `buildDraftPrompt` ではなく task 5.3 の `generateDraft` が担う。
+- 環境: 本セッション中、作業ツリーに **並行する discord-gateway / infra-foundation 実装ストリーム**(`src/discord/*`・`src/agents/*`・`tsconfig.test.json`・`vitest.config.ts`・`test/discord-*`・他 spec の tasks.md、および `status-operations.ts` への整形リフロー)が混在。status-and-draft の各タスクは選択的ステージングで自タスクのファイルのみコミットすること。
+- ディスパッチャ拡張(6.x 前提・ユーザー承認済み): `/goal status`・`/evidence list` は goal-management 所有の `goal`/`evidence` トップレベルと衝突するため、`src/discord/dispatch.ts` を「`<top-level> <subcommand>` 結合キー優先 → 未登録ならトップレベル fallback」に後方互換拡張済み(commit 177913c)。`ctx.name` はトップレベルのまま。登録(6.3)は `registerHandler("command","goal status",...)` 等の結合キーで行う。
+- 6.2: 揮発 draft pending は **infra ephemeral KV**(committed infra task 4.5 の `putEphemeral`/`getEphemeral`/`deleteEphemeral`)へ persist/hydrate する。`/draft`・調整・保存は別 interaction のため Map では跨げない。`src/status-and-draft/routing.ts`(checkin/routing.ts のミラー)が bridge。design の「Agent インスタンスメモリ」表現はこの ephemeral-KV 方式に更新。5ボタン行(調整4+保存)は `handlers/draft-buttons.ts` の共有ヘルパーが組立。

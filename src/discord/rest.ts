@@ -1,5 +1,5 @@
 import type { DiscordEnv } from "./env";
-import type { SendResult } from "./types";
+import type { MessageActionRow, SendResult } from "./types";
 
 /**
  * fetch ベースの薄い Discord REST クライアント (Req 4.2, 5.1, 5.4)。
@@ -42,6 +42,11 @@ const EPHEMERAL_FLAG = 64;
 export interface SendOptions {
   /** true のとき ephemeral(本人のみ可視)フラグ(64)をボディに付与する。 */
   readonly ephemeral?: boolean;
+  /**
+   * message 用 action row / button(Req 4.9)。webhook 送信(follow-up)経路でのみ用い、
+   * 指定時は body の `components` に出力する。
+   */
+  readonly components?: readonly MessageActionRow[];
 }
 
 /**
@@ -56,15 +61,23 @@ export type DmOpenResult =
   | { ok: true; channelId: string }
   | { ok: false; reason: "forbidden" | "not_found" | "rest_error"; status?: number };
 
-/** メッセージ送信ボディ(content + 任意 ephemeral flag)。 */
+/** メッセージ送信ボディ(content + 任意 ephemeral flag + 任意 components)。 */
 interface MessageBody {
   content: string;
   flags?: number;
+  components?: readonly MessageActionRow[];
 }
 
-/** content と ephemeral オプションから Discord メッセージボディを組み立てる。 */
+/** content と ephemeral / components オプションから Discord メッセージボディを組み立てる。 */
 function messageBody(content: string, opts?: SendOptions): MessageBody {
-  return opts?.ephemeral ? { content, flags: EPHEMERAL_FLAG } : { content };
+  const body: MessageBody = { content };
+  if (opts?.ephemeral) {
+    body.flags = EPHEMERAL_FLAG;
+  }
+  if (opts?.components !== undefined) {
+    body.components = opts.components;
+  }
+  return body;
 }
 
 /**

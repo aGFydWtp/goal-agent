@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "register:commands": "tsx scripts/register-commands.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run"
   },
@@ -19,6 +20,7 @@
     "@cloudflare/vitest-pool-workers": "^0.16.15",
     "@cloudflare/workers-types": "^4.20260613.1",
     "discord-api-types": "^0.38.48",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.0",
     "vitest": "^4.1.8",
     "wrangler": "^4.100.0"

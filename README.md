@@ -1,85 +1,134 @@
-# goal-agent — インフラ基盤 (infra-foundation)
+# goal-agent
 
-評価目標フォロー Agent の共通実行基盤(Cloudflare Workers + Agents SDK / TypeScript)です。本リポジトリは下位スペックが乗る土台のみを提供し、Discord 機能やドメイン CRUD は含みません。
+半期の評価目標を Discord Bot 経由で継続追跡する個人向け Agent です。Cloudflare Workers + Agents SDK 上で動作し、Discord の slash command / modal / button から、目標管理・週次チェックイン・証跡管理・状態確認・自己評価ドラフト生成を扱います。
 
-本 README は開発者向けに、前提条件・セットアップ・ローカル開発・型チェック・Lint/Format・デプロイ・テストの手順を記載します(Req 1.5)。
+## 現在の主な機能
 
-## 前提条件 (Prerequisites)
+- `/cycle` — 評価サイクルを作成する
+- `/goal add` — 評価目標を modal 入力で追加する
+- `/goal status` — 指定した目標の状態と次アクションを表示する
+- `/evidence delete` — 保存済み証跡を削除する
+- `/evidence list` — 保存済み証跡を一覧表示する
+- `/checkin` — 今週やったことを入力し、目標へ分類して確認後に証跡化する
+- `/status` — 半期全体の各目標の状態を一覧表示する
+- `/draft goal` / `/draft all` — 保存済み証跡から自己評価ドラフトを生成する
 
-### 必要ツール
+Discord コマンドは global 登録を基本にします。開発時だけ guild 登録を使う場合は、global と guild の両方に同名コマンドを残すと Discord UI に 2 個ずつ表示されます。
 
-- **Node.js v24**(ビルド/スクリプト/CI のホスト実行系)
-- **pnpm**(パッケージマネージャ。npm / bun は使用しない)
-- **wrangler**(Cloudflare Workers のビルド・ローカル開発・デプロイ。`devDependencies` 経由で導入されるため、`pnpm` 経由で実行する)
+## 前提条件
 
-### 必要バインディング
+- Node.js v24
+- pnpm
+- Cloudflare アカウントと Wrangler 認証
+- Discord Application / Bot
 
-`wrangler.jsonc` で以下のバインディングを宣言済みです。
-
-- **Workers AI**: `AI`(`ai.binding`)。`remote: true` のためリモートリソースです。実際に呼び出すには Cloudflare アカウントへの認証が必要です。
-- **Durable Object**: `EvaluationCycleAgent` / `GoalAgent`(`durable_objects.bindings`)。`migrations.new_sqlite_classes` で SQLite 対応クラスとして宣言しています。
-
-### Cloudflare アカウントについて
-
-- `pnpm dev`(= `wrangler dev`)および `pnpm deploy`(= `wrangler deploy`)は、`AI` がリモートリソースであるため Cloudflare アカウントへの認証を前提とします。
-- 認証情報なしでローカル起動のみ行いたい場合は、`pnpm dev --local`(= `wrangler dev --local`)を使用してください。ローカルモードでは Workers / Durable Object をローカルエミュレートします。なお `AI` バインディングはリモート専用のため、ローカルモードで AI 推論を実際に呼ぶことはできません(本基盤の疎通確認・型チェックには影響しません)。
-
-## セットアップ (Install)
+## セットアップ
 
 ```bash
 pnpm install
 ```
 
-`pnpm-lock.yaml` をコミットしてください。
+ローカル実行とコマンド登録では `.dev.vars` から Discord 設定を読みます。シークレットはコミットしないでください。
 
-## ローカル開発 (Local dev)
+```dotenv
+DISCORD_PUBLIC_KEY=...
+DISCORD_APPLICATION_ID=...
+DISCORD_BOT_TOKEN=...
+# 任意: guild 単位でコマンド登録したい場合だけ指定
+# DISCORD_GUILD_ID=...
+# 任意: DM 失敗時の個人用フォールバック先
+# DISCORD_FALLBACK_CHANNEL_ID=...
+```
+
+本番の Worker には Wrangler secret / Cloudflare dashboard で同等の値を設定します。
+
+```bash
+pnpm wrangler secret put DISCORD_PUBLIC_KEY
+pnpm wrangler secret put DISCORD_APPLICATION_ID
+pnpm wrangler secret put DISCORD_BOT_TOKEN
+```
+
+## ローカル開発
 
 ```bash
 pnpm dev
 ```
 
-- 上記は `wrangler dev` を実行します。
-- 起動後、ローカルサーバーは `http://localhost:8787` で待ち受けます。
-- ルート(`/`)への GET は HTTP 200 を返すヘルスレスポンス(本文 `goal-agent: ok`)になります。それ以外のパスは 404 を返します。
+主なエンドポイント:
 
-Cloudflare の認証情報が利用できない環境では、ローカルエミュレーションで起動できます。
+- `GET /` — `goal-agent: ok`
+- `GET /__health/wiring` — Durable Object / LLM クライアント配線の疎通確認
+- `POST /interactions` — Discord interactions 受信口
+
+Cloudflare 認証が使えない環境では、ローカルエミュレーションで起動できます。
 
 ```bash
 pnpm dev --local
 ```
 
-## 型チェック (Typecheck)
+Workers AI は `wrangler.jsonc` で `remote: true` のため、AI 推論を実際に呼ぶには Cloudflare 側の認証とリモートバインディングが必要です。
+
+## Discord コマンド登録
+
+global に登録する通常手順:
 
 ```bash
-pnpm typecheck
+pnpm run register:commands
 ```
 
-- 上記は `tsc --noEmit` を実行します。
-- TypeScript は strict 設定で、型エラーなく完了することがプロジェクトの完了条件です(Req 1.1)。
-
-## Lint / Format
+開発用 guild にだけ登録する場合:
 
 ```bash
+pnpm run register:commands -- --guild-id <guild-id>
+```
+
+`DISCORD_GUILD_ID` が `.dev.vars` にある場合も guild 登録になります。global だけで運用したい場合は `DISCORD_GUILD_ID` を外してください。
+
+現在の登録スクリプトは以下をまとめて Discord API へ bulk overwrite します。
+
+- `/cycle`
+- `/goal` (`add`, `status`)
+- `/evidence` (`delete`, `list`)
+- `/checkin`
+- `/status`
+- `/draft` (`goal`, `all`)
+
+## デプロイ
+
+```bash
+pnpm run deploy
+```
+
+`pnpm deploy` は pnpm の組み込み deploy と解釈されるため、このリポジトリでは `pnpm run deploy` を使います。
+
+デプロイ後、Discord Developer Portal の Interactions Endpoint URL には Worker の `/interactions` を設定します。
+
+```text
+https://<worker-domain>/interactions
+```
+
+## 開発コマンド
+
+```bash
+pnpm run typecheck
+pnpm test
 pnpm biome check --write
 ```
 
-- Biome を使用します(ESLint / Prettier は使用しない)。設定はリポジトリ直下の `biome.json` です。
-- **タスク完了ゲート**: 各タスクの最後に必ず実行し、エラーが残っていないことを確認してから完了とします。`--write` で自動修正できない違反は手で直します。
+- `pnpm run typecheck` — `tsc --noEmit` と test 用 tsconfig の型チェック
+- `pnpm test` — Vitest
+- `pnpm biome check --write` — Lint / Format
 
-## デプロイ (Deploy)
+タスク完了時は、対象テスト・型チェック・Biome を通してから完了扱いにします。
 
-```bash
-pnpm deploy
-```
+## アーキテクチャ概要
 
-- 上記は `wrangler deploy` を実行します。
-- デプロイには Cloudflare アカウントの認証が必要です。`wrangler login`(ブラウザ認証)、または `CLOUDFLARE_API_TOKEN` 等の API トークンを環境変数で設定してください。
-- **認証情報・シークレットはコミットしません**。Cloudflare のシークレット(`wrangler secret put`)や環境変数で管理します。
+- `src/index.ts` — Worker entry。Discord 署名検証、PING/PONG、interaction dispatch を行う
+- `src/discord/` — Discord gateway。コマンド登録、handler registry、reply/deferred/follow-up/modal/button、REST 送信を扱う
+- `src/agents/` — `EvaluationCycleAgent` / `GoalAgent`
+- `src/goal-management/` — cycle / goal / evidence のコマンド・ハンドラ・ドメイン処理
+- `src/checkin-classification/` — `/checkin`、分類、pending 保存、確認ボタン、週次レビュー
+- `src/status-and-draft/` — `/status`、`/draft`、`/goal status`、`/evidence list`
+- `src/notifications/` — DM / 個人用フォールバックチャンネルへの通知送信
 
-## テスト (Test)
-
-```bash
-pnpm test
-```
-
-- 上記は `vitest run`(`@cloudflare/vitest-pool-workers` 利用)を実行します。
+永続化は Durable Object SQLite、LLM は Cloudflare Workers AI 抽象化レイヤ経由です。個人評価データは DM または個人用非公開チャンネル、ephemeral 応答を前提に扱います。

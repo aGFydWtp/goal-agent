@@ -15,37 +15,26 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          // 永続化のユニットテスト群。node:sqlite を使う migrator/repository はここで動かす。
-          include: [
-            "test/migrator.test.ts",
-            "test/repository.test.ts",
-            "test/llm-client.test.ts",
-            "test/llm-workers-ai.test.ts",
-            "test/agent-ids.test.ts",
-            // 境界整合の機械的検証(task 6.4)。node:fs でソースを静的検査するため node プロジェクト。
-            "test/boundary.test.ts",
-            // Ed25519 署名検証(task 2.1)。discord-interactions verifyKey の純粋ロジック。
-            "test/discord-verify.test.ts",
-            // 応答ユーティリティ(task 2.2)。応答ボディ生成の純粋ロジック。
-            "test/discord-response.test.ts",
-            // REST クライアント(task 2.3)。fetch モックで純粋に検証する。
-            "test/discord-rest.test.ts",
-            // follow-up 送信ユーティリティ(task 2.4)。fetch モックで純粋に検証する。
-            "test/discord-followup.test.ts",
-            // プロアクティブ送信ヘルパー(task 2.5)。fetch モックで純粋に検証する。
-            "test/discord-proactive.test.ts",
-            // プロアクティブ送信のプライバシー境界(task 5.3)。送信先 URL 限定と export 面を fetch モックで構造検証する。
-            "test/discord-proactive-privacy.test.ts",
-            // ハンドラレジストリ(task 3.1)。(kind,name)→handler のマップ規約の純粋ロジック。
-            "test/discord-registry.test.ts",
-            // interaction ディスパッチャ(task 3.2)。fake ctx + fetch モックで純粋に検証する。
-            "test/discord-dispatch.test.ts",
-            // コマンド定義の集約点(task 3.3)。空の集約 + 追加できる構造の純粋ロジック。
-            "test/discord-command-definitions.test.ts",
-            // コマンド登録スクリプト(task 3.4)。fetch モックで bulk overwrite を純粋に検証する。
-            "test/discord-command-register.test.ts",
-            // コマンド登録スモーク(task 5.2)。集約点 → register の end-to-end を fetch モックで疎通確認する。
-            "test/discord-register-smoke.test.ts",
+          // 純ロジック/永続化のユニットテスト群(node:sqlite を使う migrator/repository 等)。
+          // 各スペックがファイルごとに登録する allowlist 方式は共有 config への頻繁な競合編集を
+          // 招くため、test/ 直下の *.test.ts を glob で自動取り込みする。workers ランタイムを
+          // 要するテストだけを下の exclude で除外する(node 環境では二重実行/環境不一致になるため)。
+          include: ["test/**/*.test.ts"],
+          // workers プロジェクト(下記)で実行するランタイム統合テスト。node からは除外する。
+          // ここに列挙されない新規 *.test.ts は自動的に node プロジェクトで実行される。
+          exclude: [
+            "test/types.test.ts",
+            "test/schema.test.ts",
+            "test/evaluation-cycle-agent.test.ts",
+            "test/evaluation-cycle-agent-ephemeral.test.ts",
+            "test/notifications-agent-wiring.test.ts",
+            "test/goal-agent.test.ts",
+            "test/routing.test.ts",
+            "test/worker-entry.test.ts",
+            "test/discord-worker-interactions.test.ts",
+            "test/discord-dispatch-integration.test.ts",
+            "test/discord-ping-smoke.test.ts",
+            "test/integration.test.ts",
           ],
         },
       },
@@ -65,6 +54,10 @@ export default defineConfig({
             "test/types.test.ts",
             "test/schema.test.ts",
             "test/evaluation-cycle-agent.test.ts",
+            // 汎用揮発 KV サーフェス(task 4.5, Req 3.7-3.9)。DO ランタイム上で getByName 同名解決の put/get/delete を検証する。
+            "test/evaluation-cycle-agent-ephemeral.test.ts",
+            // 週次チェックイン配線(task 6.3, Req 1.1, 1.2, 7.3)。onStart の schedule 登録 + 追加マイグレーション + fireWeeklyCheckin 委譲を DO ランタイムで検証する。
+            "test/notifications-agent-wiring.test.ts",
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",
