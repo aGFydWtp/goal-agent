@@ -1,7 +1,7 @@
 /**
  * Weekly Checkin Scheduler(週次チェックイン cron の冪等登録) (Req 1.1, 1.3, 1.4)。
  *
- * design.md §Weekly Checkin Scheduler の通り、毎週金曜 16:30 に発火する定期スケジュールを
+ * design.md §Weekly Checkin Scheduler の通り、毎週金曜(日本時間)15:00 に発火する定期スケジュールを
  * Agent の `this.schedule()` に登録する。本モジュールは Agent 本体ではなく、必要な API
  * サブセット({@link WeeklyCheckinSchedulerAgent})だけを受け取る純粋ヘルパーとして実装する。
  * これにより単体テスト可能で、後続タスク(EvaluationCycleAgent への配線)が `this` を渡して
@@ -12,13 +12,13 @@
  */
 
 /**
- * 毎週金曜 16:30 を表す cron 式(分 時 日 月 曜。5 = 金曜) (Req 1.1)。
+ * 毎週金曜(日本時間 JST)15:00 を表す cron 式(分 時 日 月 曜。5 = 金曜) (Req 1.1)。
  *
  * 注意(タイムゾーン):agents SDK の cron は DO アラームのタイムゾーン(UTC)で評価される。
- * 仕様の「金曜16:30」は TZ を明示しないため、ここでは design.md のリテラル cron をそのまま
- * 用いる。ローカルタイム変換が必要なら後続タスクで扱う(本タスクでは変換しない)。
+ * 目標の「JST 金曜15:00」は UTC では金曜06:00(JST = UTC+9)に相当するため、UTC 基準で
+ * `0 6 * * 5` を登録する。DO 側に TZ 指定の余地がないため、この UTC リテラルで JST 15:00 を表現する。
  */
-export const WEEKLY_CHECKIN_CRON = "30 16 * * 5";
+export const WEEKLY_CHECKIN_CRON = "0 6 * * 5";
 
 /**
  * cron 発火時に呼ばれる EvaluationCycleAgent のコールバックメソッド名 (Req 1.2)。

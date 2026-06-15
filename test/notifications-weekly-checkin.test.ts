@@ -49,7 +49,7 @@ class FakeSchedulerAgent implements WeeklyCheckinSchedulerAgent {
 }
 
 describe("scheduleWeeklyCheckin (週次チェックイン cron の冪等登録)", () => {
-  it("未登録時に金曜16:30 cron を 1 件登録する (Req 1.1)", async () => {
+  it("未登録時に金曜(JST)15:00 cron を 1 件登録する (Req 1.1)", async () => {
     const agent = new FakeSchedulerAgent();
 
     await scheduleWeeklyCheckin(agent);
@@ -59,7 +59,7 @@ describe("scheduleWeeklyCheckin (週次チェックイン cron の冪等登録)"
 
     const [registered] = agent.schedules;
     expect(registered.cron).toBe(WEEKLY_CHECKIN_CRON);
-    expect(registered.cron).toBe("30 16 * * 5"); // 金曜 16:30(分 時 日 月 曜、5=金曜)
+    expect(registered.cron).toBe("0 6 * * 5"); // JST 金曜15:00 = UTC 金曜06:00(分 時 日 月 曜、5=金曜)
     expect(registered.callback).toBe(WEEKLY_CHECKIN_CALLBACK);
     expect(registered.callback).toBe("fireWeeklyCheckin");
     expect(registered.type).toBe("cron");
