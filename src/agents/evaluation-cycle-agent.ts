@@ -1,6 +1,7 @@
 import { Agent, type AgentContext, callable } from "agents";
 import type { DiscordEnv } from "../discord/env";
 import type { Env } from "../env";
+import { defaultDeps } from "../goal-management/domain/cycle-operations";
 import { getUserCycleAuthority } from "../goal-management/routing";
 import { createLlmClient } from "../llm/factory";
 import { runWeeklyCheckinCycle } from "../notifications/domain/notification-operations";
@@ -9,9 +10,8 @@ import { createAlertStateStore } from "../notifications/state/alert-state";
 import { runNotificationMigrations } from "../notifications/state/migrations";
 import { runMigrations } from "../persistence/migrator";
 import { createRepository, type Repository } from "../persistence/repository";
-import { defaultDeps } from "../goal-management/domain/cycle-operations";
-import { parseAgentName } from "./ids";
 import type { EntityName, EntityRow } from "../types";
+import { parseAgentName } from "./ids";
 
 /**
  * サイクル単位のデータ権威となる Agent (Req 3.1, 3.5 / design.md
