@@ -26,45 +26,75 @@ export const WEEKLY_CHECKIN_CRON = "0 6 * * 5";
  */
 export const WEEKLY_CHECKIN_CALLBACK = "fireWeeklyCheckin";
 
+export interface WeeklyCheckinSchedule {
+  id: string;
+  callback?: string;
+  type?: string;
+  cron?: string;
+}
+
 /**
  * {@link scheduleWeeklyCheckin} が必要とする Agent API の構造的サブセット。
  *
  * 実 Agent(EvaluationCycleAgent)はこのインターフェースを構造的に満たすため、本ヘルパーは
  * Agent 全体に依存せず単体テスト可能。`schedule` は cron 文字列で定期スケジュールを登録し、
- * `getSchedules` は登録済みスケジュールを同期的に列挙する(agents SDK 準拠)。
+ * `listSchedules` は登録済みスケジュールを非同期に列挙し、`cancelSchedule` は古い cron を解除する
+ * (agents SDK 準拠)。`getSchedules` はテスト/旧 SDK 互換のフォールバック。
  */
 export interface WeeklyCheckinSchedulerAgent {
   schedule(when: string, callback: string, payload?: unknown): Promise<unknown>;
-  getSchedules(): ReadonlyArray<{ id: string; callback?: string; type?: string; cron?: string }>;
+  cancelSchedule(id: string): Promise<boolean>;
+  listSchedules?(criteria?: { type?: "cron" }): Promise<ReadonlyArray<WeeklyCheckinSchedule>>;
+  getSchedules?(criteria?: { type?: "cron" }): ReadonlyArray<WeeklyCheckinSchedule>;
 }
 
 /**
- * 毎週金曜 16:30 の週次チェックイン cron を冪等に登録する (Req 1.1, 1.3, 1.4)。
+ * 毎週金曜 JST 15:00 の週次チェックイン cron を冪等に登録する (Req 1.1, 1.3, 1.4)。
  *
  * 手順:
- *  1. `getSchedules()` を照会し、コールバック名が {@link WEEKLY_CHECKIN_CALLBACK} で
- *     (cron が判明する場合は cron が {@link WEEKLY_CHECKIN_CRON} に一致する)週次チェックイン
- *     スケジュールが既に登録済みかを判定する。冪等性を明示的・テスト可能にし、SDK の暗黙的な
- *     cron 重複排除のみに依存しない(防御的二重化・Req 1.4)。
- *  2. 一致するスケジュールが存在すれば no-op(再初期化でも重複登録しない・Req 1.4)。
- *  3. 未登録なら {@link WEEKLY_CHECKIN_CRON} の cron を登録する (Req 1.1)。cron は毎週同一
+ *  1. 登録済み cron を照会し、コールバック名が {@link WEEKLY_CHECKIN_CALLBACK} の週次チェックイン
+ *     スケジュールを抽出する。
+ *  2. callback は同じだが cron が {@link WEEKLY_CHECKIN_CRON} と異なる既存行を stale とみなし、
+ *     `cancelSchedule()` で解除する。Agents SDK のスケジュールは永続 SQLite に残るため、cron 定数
+ *     変更時はこの置換が必要。
+ *  3. 正しい cron が既に存在すれば no-op(再初期化でも重複登録しない・Req 1.4)。
+ *  4. 未登録なら {@link WEEKLY_CHECKIN_CRON} の cron を登録する (Req 1.1)。cron は毎週同一
  *     曜日・時刻に繰り返し発火するため、以降の繰り返し発火が維持される (Req 1.3)。
  *
- * @param agent `schedule` / `getSchedules` を備えた Agent(またはその構造的サブセット)。
+ * @param agent `schedule` / `cancelSchedule` / `listSchedules` を備えた Agent(またはその構造的サブセット)。
  */
 export async function scheduleWeeklyCheckin(agent: WeeklyCheckinSchedulerAgent): Promise<void> {
-  const existing = agent.getSchedules();
-  const alreadyRegistered = existing.some(
-    (schedule) =>
-      schedule.callback === WEEKLY_CHECKIN_CALLBACK &&
-      // cron が露出している場合のみ一致確認する。露出しない実装でも callback 一致で冪等を担保。
-      (schedule.cron === undefined || schedule.cron === WEEKLY_CHECKIN_CRON),
+  const existing = await listCronSchedules(agent);
+  const weeklyCheckinSchedules = existing.filter(
+    (schedule) => schedule.callback === WEEKLY_CHECKIN_CALLBACK,
+  );
+  const staleSchedules = weeklyCheckinSchedules.filter(
+    (schedule) => schedule.cron !== WEEKLY_CHECKIN_CRON,
   );
 
-  if (alreadyRegistered) {
+  for (const schedule of staleSchedules) {
+    await agent.cancelSchedule(schedule.id);
+  }
+
+  const currentRegistered = weeklyCheckinSchedules.some(
+    (schedule) => schedule.cron === WEEKLY_CHECKIN_CRON,
+  );
+  if (currentRegistered) {
     // 既に同 cron+callback が登録済み → 重複登録しない (Req 1.4)。
     return;
   }
 
   await agent.schedule(WEEKLY_CHECKIN_CRON, WEEKLY_CHECKIN_CALLBACK);
+}
+
+async function listCronSchedules(
+  agent: WeeklyCheckinSchedulerAgent,
+): Promise<ReadonlyArray<WeeklyCheckinSchedule>> {
+  if (agent.listSchedules) {
+    return agent.listSchedules({ type: "cron" });
+  }
+  if (agent.getSchedules) {
+    return agent.getSchedules({ type: "cron" });
+  }
+  return [];
 }
