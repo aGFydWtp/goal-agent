@@ -1,8 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { checkinCommandDefinitions } from "../src/checkin-classification/commands.ts";
 import { registerCommands } from "../src/discord/commands/register.ts";
-import { goalManagementCommandDefinitions } from "../src/goal-management/commands.ts";
+import {
+  EVIDENCE_COMMAND_NAME,
+  GOAL_COMMAND_NAME,
+  goalManagementCommandDefinitions,
+} from "../src/goal-management/commands.ts";
+import {
+  draftCommandDefinition,
+  evidenceListSubcommandDefinition,
+  goalStatusSubcommandDefinition,
+  statusCommandDefinition,
+} from "../src/status-and-draft/commands.ts";
 
 function unquote(value) {
   const trimmed = value.trim();
@@ -58,16 +69,45 @@ function parseGuildId(argv) {
   return process.env.DISCORD_GUILD_ID;
 }
 
+function mergeSubcommand(definitions, topLevelName, subcommand) {
+  return definitions.map((definition) => {
+    if (definition.name !== topLevelName) {
+      return definition;
+    }
+    return {
+      ...definition,
+      options: [...(definition.options ?? []), subcommand],
+    };
+  });
+}
+
+function buildCommandDefinitions() {
+  let definitions = [
+    ...goalManagementCommandDefinitions,
+    ...checkinCommandDefinitions,
+    statusCommandDefinition,
+    draftCommandDefinition,
+  ];
+  definitions = mergeSubcommand(definitions, GOAL_COMMAND_NAME, goalStatusSubcommandDefinition);
+  definitions = mergeSubcommand(
+    definitions,
+    EVIDENCE_COMMAND_NAME,
+    evidenceListSubcommandDefinition,
+  );
+  return definitions;
+}
+
 loadDevVars();
 
 const applicationId = process.env.DISCORD_APPLICATION_ID ?? "";
 const botToken = process.env.DISCORD_BOT_TOKEN ?? "";
 const guildId = parseGuildId(process.argv.slice(2));
+const definitions = buildCommandDefinitions();
 
 const result = await registerCommands(
   applicationId,
   botToken,
-  goalManagementCommandDefinitions,
+  definitions,
   guildId === undefined || guildId === "" ? undefined : { guildId },
 );
 
