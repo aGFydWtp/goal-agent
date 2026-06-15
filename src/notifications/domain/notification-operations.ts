@@ -272,3 +272,41 @@ export async function evaluateAndSendAlerts(args: EvaluateAndSendAlertsArgs): Pr
     }
   }
 }
+
+/** {@link runWeeklyCheckinCycle} の引数。両委譲先が必要とする全コンテキストを束ねる。 */
+export interface RunWeeklyCheckinCycleArgs extends EvaluateAndSendAlertsArgs {}
+
+/**
+ * 週次チェックインサイクル オーケストレータ(cron 発火コールバックの委譲先) (Req 1.2, 2.1, 4.1, 7.1)。
+ *
+ * design.md §Notification Domain Operations の `runWeeklyCheckin`「続けて evaluateAndSendAlerts を起動」を
+ * 単一の合成関数として実装する。EvaluationCycleAgent の `fireWeeklyCheckin` はこの関数へ委譲するのみで、
+ * ドメイン判定/色判定/トリガ評価は一切持たない(boundary.test 準拠)。
+ *
+ * 手順:
+ *  1. `determineAllStatuses(userId)` を**一度だけ**実行し、判定結果をメモ化する。
+ *  2. メモ化した判定を注入して {@link runWeeklyCheckin}(チェックイン件数集計+配信)を起動する(Req 2.1)。
+ *  3. 同じメモ化判定を注入して {@link evaluateAndSendAlerts}(アラート評価+配信)を起動する(Req 4.1)。
+ *
+ * これにより設計の Invariant「判定は週次発火あたり1回(`determineAllStatuses` を両用途で再利用)」を満たす。
+ * 各委譲先のロジック(件数集計・トリガ評価・dedup・配信)は再実装せず消費するのみ(Req 7.1)。
+ *
+ * @param args 実行コンテキストと注入された上流契約({@link evaluateAndSendAlerts} と同一)。
+ */
+export async function runWeeklyCheckinCycle(args: RunWeeklyCheckinCycleArgs): Promise<void> {
+  const determineAllStatuses = args.determineAllStatuses ?? determineAllStatusesImpl;
+
+  // 判定を週次発火あたり1回に固定し、両用途で再利用する(設計 Invariant / Req 7.1)。
+  // メモ化した結果を両委譲先へ同一契約として注入する(2 回実行されない)。
+  let cached: Promise<DetermineAllStatusesResult> | null = null;
+  const memoized: DetermineAllStatusesFn = (authority, deps, llm, userId) => {
+    cached ??= determineAllStatuses(authority, deps, llm, userId);
+    return cached;
+  };
+
+  const shared = { ...args, determineAllStatuses: memoized };
+
+  // チェックイン(件数集計+配信)→ 続けてアラート評価・配信(Req 1.2, 4.1)。
+  await runWeeklyCheckin(shared);
+  await evaluateAndSendAlerts(shared);
+}

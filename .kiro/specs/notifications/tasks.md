@@ -66,7 +66,7 @@
   - _Requirements: 1.1, 1.3, 1.4_
   - _Boundary: Weekly Checkin Scheduler_
 
-- [ ] 6. 統合: 週次評価ドメインメソッドと Agent 配線
+- [x] 6. 統合: 週次評価ドメインメソッドと Agent 配線
 - [x] 6.1 週次チェックイン実行ドメインメソッドを実装する
   - 発火時にアクティブサイクルを確認し、無ければ何も送らず終了する
   - status-and-draft の全目標判定を実行して Green/Yellow/Red 件数を集計し(目標0件は全0)、チェックイン文を組み立てて配信する
@@ -86,7 +86,7 @@
   - _Boundary: Notification Domain Operations_
   - _Depends: 2.2, 2.3, 3.1, 4.1, 6.1_
 
-- [ ] 6.3 スケジュール登録と発火コールバックを EvaluationCycleAgent へ配線する
+- [x] 6.3 スケジュール登録と発火コールバックを EvaluationCycleAgent へ配線する
   - EvaluationCycleAgent の初期化で週次スケジュール登録を起動し、本スペックの追加マイグレーションを既存ランナーと共存する形で適用する
   - cron 発火コールバックを週次チェックイン実行(内部でアラート評価・配信を起動)へ委譲する
   - 基盤(this.schedule / Agent / DO SQLite)・LLM クライアントは infra の提供物を利用し再定義しない
@@ -116,3 +116,5 @@
 - マイグレーションは infra の `runMigrations(sql, migrations)` ランナーを再利用し、notifications は独立 version(1000+)で共有 `schema_migrations` 台帳上に共存。
 - スケジュール: agents SDK の `this.schedule(cronExpr, callbackMethodName)` はクーロン既定で冪等。コールバックは Agent の `keyof this` メソッド名。タスク5.1/6.3 は `EvaluationCycleAgent` への最小配線(`onStart` でのスケジュール登録 + 委譲コールバックメソッド)が必須(設計の Modified Files と一致)。ドメインロジックは notifications モジュールの純関数に保ち boundary.test を満たす。金曜16:30 cron = `30 16 * * 5`。
 - トリガ判断(裁定済み): `no_evidence_2w` は `latestEvidenceAgeDays !== null && >= 14` のみ成立(年齢ベース)。証跡0件(null)は成立させない(設計 L383/L401 の null=証跡なし意味、タスク6.2「証跡経過2週超」記述に準拠)。期限トリガは `<=30`/`<=14` で評価し、サイクル内重複抑止は dedup(2.3)が担う。
+- 6.2 状態更新タイミング(裁定済み): `upsertLastStatus`(直近状態更新)は配信成否と独立に成立判定直後に実行、`recordSent`(送信履歴)のみ配信成功にゲート。設計シーケンス図 L177-187/L191・Req 3.3/6.4 と一致(再送は alert_sent_log の dedup で担保)。証跡経過は `daysUntilCycleEnd(evidenceDate, now)` の符号反転で age 算出(日付ユーティリティ非再実装)。
+- 6.3 構成(裁定済み): 設計 §file-structure の `schedule/register.ts` は新設せず、配線は `EvaluationCycleAgent.onStart`(`runNotificationMigrations` + `scheduleWeeklyCheckin`)+ 薄い `fireWeeklyCheckin` コールバックで実装。発火は notifications ドメインの新オーケストレータ `runWeeklyCheckinCycle`(`determineAllStatuses` をメモ化し週次1回に集約 → checkin → alert)へ委譲。Agent 本体は色/判定名を持たず boundary.test 維持。DO ランタイム結合テストは workers project(`vitest.config.ts` で振り分け)。

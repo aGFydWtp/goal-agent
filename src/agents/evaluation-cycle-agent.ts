@@ -1,7 +1,16 @@
 import { Agent, type AgentContext, callable } from "agents";
+import type { DiscordEnv } from "../discord/env";
 import type { Env } from "../env";
+import { getUserCycleAuthority } from "../goal-management/routing";
+import { createLlmClient } from "../llm/factory";
+import { runWeeklyCheckinCycle } from "../notifications/domain/notification-operations";
+import { scheduleWeeklyCheckin } from "../notifications/schedule/weekly-checkin";
+import { createAlertStateStore } from "../notifications/state/alert-state";
+import { runNotificationMigrations } from "../notifications/state/migrations";
 import { runMigrations } from "../persistence/migrator";
 import { createRepository, type Repository } from "../persistence/repository";
+import { defaultDeps } from "../goal-management/domain/cycle-operations";
+import { parseAgentName } from "./ids";
 import type { EntityName, EntityRow } from "../types";
 
 /**
@@ -59,6 +68,55 @@ export class EvaluationCycleAgent extends Agent<Env> {
   /** このサイクルの権威 SQLite に束ねたリポジトリを返す。 */
   private repository(): Repository {
     return this.repositoryInstance;
+  }
+
+  // ---- 週次チェックイン配線(notifications への最小委譲・task 6.3) -----------
+  // 本クラスはドメイン判定/色判定/トリガ評価を一切持たず、notifications モジュールの
+  // 純関数へ委譲するのみ(基盤境界 6.2/6.3 / boundary.test 準拠)。`onStart` は infra の
+  // ライフサイクルフックで、週次スケジュール登録と notifications 追加マイグレーションを
+  // 既存ランナーと共存する形で適用する。`fireWeeklyCheckin` は cron 発火コールバックで、
+  // 週次チェックインサイクル(チェックイン+アラート評価・配信)の起動を委譲する。
+
+  /**
+   * DO 起動(初回 + ハイバネーション復帰)ごとに非同期実行される infra ライフサイクルフック。
+   *
+   * 1. notifications 所有の追加テーブル(`last_goal_status` / `alert_sent_log`)を独立 version の
+   *    冪等マイグレーションで適用する。既存 §11 ランナーと同一台帳上で共存する(Req 7.3)。
+   * 2. 週次チェックイン cron を冪等登録する(Req 1.1)。再起動で `onStart` が再実行されても
+   *    `scheduleWeeklyCheckin` の冪等性により重複登録しない(Req 1.4)。
+   */
+  async onStart(): Promise<void> {
+    runNotificationMigrations(this.ctx.storage.sql);
+    await scheduleWeeklyCheckin(this);
+  }
+
+  /**
+   * 週次 cron 発火コールバック(`WEEKLY_CHECKIN_CALLBACK = "fireWeeklyCheckin"`) (Req 1.2)。
+   *
+   * 自身の Agent 名(`evaluation:{userId}:primary`)から所有ユーザーを導出し、infra 提供物
+   * (データ権威 / LLM クライアント / DO SQLite)と env を集めて、notifications の週次チェックイン
+   * サイクル(チェックイン配信に続けてアラート評価・配信)へ委譲する。評価/判定/整形/配信の
+   * 実体はすべて notifications モジュールが所有し、本メソッドは配線のみを行う。
+   */
+  async fireWeeklyCheckin(): Promise<void> {
+    const parsed = parseAgentName(this.name);
+    if (parsed === null) {
+      // Agent 名が §6 規約に適合しない場合は所有ユーザーを特定できないため、起動を見送る。
+      return;
+    }
+
+    const env = this.env as DiscordEnv;
+    const authority = await getUserCycleAuthority(env, parsed.userId);
+
+    await runWeeklyCheckinCycle({
+      env,
+      authority,
+      deps: defaultDeps(),
+      llm: createLlmClient(this.env),
+      userId: parsed.userId,
+      store: createAlertStateStore(this.ctx.storage.sql),
+      evidence: this.repository(),
+    });
   }
 
   // ---- データ権威サーフェス(委譲配線) ---------------------------------
