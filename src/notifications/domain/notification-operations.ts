@@ -13,21 +13,18 @@
 // 本番既定はモジュール実装を束縛する。
 
 import type { DiscordEnv } from "../../discord/env";
-import type {
-  CycleDataAuthority,
-  DomainDeps,
-} from "../../goal-management/domain/cycle-operations";
-import type { LlmClient } from "../../llm/client";
 import type { SendResult } from "../../discord/types";
+import type { CycleDataAuthority, DomainDeps } from "../../goal-management/domain/cycle-operations";
+import type { LlmClient } from "../../llm/client";
+import type { Repository } from "../../persistence/repository";
 import type { DetermineAllStatusesResult } from "../../status-and-draft/domain/status-operations";
 import { determineAllStatuses as determineAllStatusesImpl } from "../../status-and-draft/domain/status-operations";
-import type { Repository } from "../../persistence/repository";
 import type { EntityRow, GoalStatus } from "../../types";
-import { daysUntilCycleEnd, evaluateTriggers } from "../alert/triggers";
 import { filterUnsentTriggers } from "../alert/dedup";
-import type { AlertStateStore } from "../state/alert-state";
+import { daysUntilCycleEnd, evaluateTriggers } from "../alert/triggers";
 import { deliver as deliverImpl } from "../delivery";
 import { buildAlertMessage, buildCheckinMessage, type StatusCounts } from "../messages";
+import type { AlertStateStore } from "../state/alert-state";
 
 /**
  * status-and-draft の全目標判定契約(消費する上流署名)。本スペックは再実装しない(Req 7.1)。
@@ -70,9 +67,7 @@ export interface RunWeeklyCheckinArgs {
  * 判定そのものは status-and-draft 所有であり、本関数は確定済みの `status` を数えるのみで
  * 色/判定ロジックを再実装しない(Req 7.1)。gray 等は §9.1 チェックイン文の対象外のため数えない。
  */
-function countStatuses(
-  results: ReadonlyArray<{ verdict: { status: string } }>,
-): StatusCounts {
+function countStatuses(results: ReadonlyArray<{ verdict: { status: string } }>): StatusCounts {
   const counts: StatusCounts = { green: 0, yellow: 0, red: 0 };
   for (const { verdict } of results) {
     if (verdict.status === "green") {
