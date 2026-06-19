@@ -11,8 +11,7 @@ const candidateGoalSchema = z
     goalId: z.string().min(1),
     relevanceScore: relevanceScoreSchema,
     reason: z.string().min(1),
-  })
-  .strict();
+  });
 
 const classificationItemSchema = z
   .object({
@@ -20,8 +19,7 @@ const classificationItemSchema = z
     candidateGoals: z.array(candidateGoalSchema),
     usefulness: usefulnessSchema,
     suggestedEvidenceTitle: z.string().min(1),
-  })
-  .strict();
+  });
 
 /**
  * §13.1 準拠のチェックイン分類結果スキーマ。
@@ -31,7 +29,6 @@ const classificationItemSchema = z
 export const classificationResultSchema = z
   .object({
     items: z.array(classificationItemSchema).min(1),
-  })
-  .strict();
+  });
 
 export type ClassificationResult = z.infer<typeof classificationResultSchema>;

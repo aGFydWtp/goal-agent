@@ -8,7 +8,12 @@ import type { LlmClient } from "./client";
 import { WorkersAiLlmClient } from "./workers-ai";
 
 // プロバイダ/モデル選択の単一集約点。変更時はここだけを編集する(Req 4.4)。
-const MODEL: keyof AiModels = "@cf/meta/llama-3.1-8b-instruct-fp8";
+//
+// JSON Mode(response_format: json_schema)対応モデルを選ぶ。旧 8B fp8 は JSON Mode 非対応で
+// 構造化出力が安定せず invalid_output を多発させたため、JSON Mode 対応かつ上位グレードの
+// llama-3.3-70b-instruct-fp8-fast へ更新する。
+// 対応モデル一覧: https://developers.cloudflare.com/workers-ai/features/json-mode/
+const MODEL: keyof AiModels = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 /**
  * 環境バインディングから既定の `LlmClient` を構築して返す。

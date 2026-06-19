@@ -98,6 +98,31 @@ describe("WorkersAiLlmClient.completeJson (Req 4.2, 4.5, design completeJson con
     }
   });
 
+  it("response_format(json_schema)を付与して JSON Mode を要求する", async () => {
+    const run = vi.fn(async () => ({
+      response: JSON.stringify({ score: 0.8, label: "good" }),
+    }));
+    const client = new WorkersAiLlmClient(makeAi(run), MODEL);
+
+    await client.completeJson({ prompt: "p" }, schema);
+
+    const [, inputs] = run.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    const responseFormat = inputs.response_format as { type: string; json_schema: unknown };
+    expect(responseFormat.type).toBe("json_schema");
+    // zod スキーマ由来の JSON Schema(object)が同梱されていること。
+    expect(responseFormat.json_schema).toBeTypeOf("object");
+  });
+
+  it("complete(非 JSON)は response_format を付与しない", async () => {
+    const run = vi.fn(async () => ({ response: "ok" }));
+    const client = new WorkersAiLlmClient(makeAi(run), MODEL);
+
+    await client.complete({ prompt: "p" });
+
+    const [, inputs] = run.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(inputs.response_format).toBeUndefined();
+  });
+
   it("JSON パース失敗時は invalid_output を返し cause に SyntaxError を載せる", async () => {
     const ai = makeAi(async () => ({ response: "not json{" }));
     const client = new WorkersAiLlmClient(ai, MODEL);

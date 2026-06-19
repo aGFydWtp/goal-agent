@@ -2,8 +2,28 @@
 // 利用側は client.ts の LlmClient 契約のみに依存し、本実装を直接 import しない。
 // モデル id はファクトリ(factory.ts)から注入され、本クラスにはハードコードしない(Req 4.4)。
 
-import type { ZodType } from "zod"; // zod v4
+import { z, type ZodType } from "zod"; // zod v4
 import type { LlmClient, LlmCompletionRequest, LlmResult } from "./client";
+
+/** Workers AI JSON Mode の response_format(プレーン JSON Schema を渡す)。 */
+interface JsonSchemaResponseFormat {
+  type: "json_schema";
+  json_schema: unknown;
+}
+
+/**
+ * zod スキーマを Workers AI JSON Mode 用の response_format へ変換する。
+ *
+ * 変換不能なスキーマでは JSON 強制を諦め、従来のプロンプト頼み経路へフォールバックする
+ * (undefined を返す)。検証は呼び出し側の zod safeParse が引き続き担保する。
+ */
+function toJsonSchemaResponseFormat(schema: ZodType<unknown>): JsonSchemaResponseFormat | undefined {
+  try {
+    return { type: "json_schema", json_schema: z.toJSONSchema(schema) };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Cloudflare Workers AI バインディングを用いた `LlmClient` 実装。
@@ -31,7 +51,9 @@ export class WorkersAiLlmClient implements LlmClient {
   }
 
   async completeJson<T>(request: LlmCompletionRequest, schema: ZodType<T>): Promise<LlmResult<T>> {
-    const text = await this.runText(request);
+    // JSON Mode 対応モデルへ schema を渡し、出力をスキーマ準拠 JSON に拘束する。
+    // 変換/拘束が効かない場合も後続の JSON.parse + safeParse が検証を担保する。
+    const text = await this.runText(request, toJsonSchemaResponseFormat(schema));
     if (!text.ok) {
       // 基盤呼び出しの失敗は provider_error / timeout のまま表面化させる。
       return text;
@@ -71,7 +93,10 @@ export class WorkersAiLlmClient implements LlmClient {
    * Workers AI を呼び出してテキストを取得する共通経路。
    * `system` が指定された場合は messages 形式、未指定なら prompt 形式で渡す。
    */
-  private async runText(request: LlmCompletionRequest): Promise<LlmResult<string>> {
+  private async runText(
+    request: LlmCompletionRequest,
+    responseFormat?: JsonSchemaResponseFormat,
+  ): Promise<LlmResult<string>> {
     const inputs: AiTextGenerationInput = request.system
       ? {
           messages: [
@@ -86,6 +111,10 @@ export class WorkersAiLlmClient implements LlmClient {
     }
     if (request.temperature !== undefined) {
       inputs.temperature = request.temperature;
+    }
+    if (responseFormat !== undefined) {
+      // workers-types は response_format を型に含めないため Record 経由で付与する。
+      (inputs as Record<string, unknown>).response_format = responseFormat;
     }
 
     try {
