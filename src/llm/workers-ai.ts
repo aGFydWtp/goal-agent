@@ -28,6 +28,15 @@ function toJsonSchemaResponseFormat(
 }
 
 /**
+ * Workers AI 1 回の呼び出しに許す上限(ミリ秒)。
+ *
+ * Workers AI の推論レイテンシは変動し、稀に応答が返らない。タイムアウトが無いと deferred
+ * 継続が無限待機し Discord が「考え中…」のまま固着するため、上限超過は timeout として
+ * 失敗させ、利用側を再試行案内へ正規化できるようにする。
+ */
+const LLM_TIMEOUT_MS = 20000;
+
+/**
  * Cloudflare Workers AI バインディングを用いた `LlmClient` 実装。
  *
  * - `complete`: テキスト補完。成功時は応答テキストを返す。
@@ -127,10 +136,7 @@ export class WorkersAiLlmClient implements LlmClient {
     }
 
     try {
-      const output = (await this.ai.run(
-        this.model,
-        inputs as AiModels[typeof this.model]["inputs"],
-      )) as AiTextGenerationOutput;
+      const output = (await this.runWithTimeout(inputs)) as AiTextGenerationOutput;
       return { ok: true, value: output.response ?? "" };
     } catch (cause) {
       // 中断/タイムアウトを区別できる場合は timeout、その他の AI 障害は provider_error。
@@ -145,5 +151,26 @@ export class WorkersAiLlmClient implements LlmClient {
         },
       };
     }
+  }
+
+  /**
+   * `ai.run` をタイムアウト付きで実行する。{@link LLM_TIMEOUT_MS} 超過時は name="TimeoutError"
+   * で reject し、無限待機(Discord「考え中…」固着)を防ぐ。成功/失敗いずれでもタイマーは解除する。
+   */
+  private runWithTimeout(inputs: AiTextGenerationInput): Promise<unknown> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error(`Workers AI 応答が ${LLM_TIMEOUT_MS}ms を超過しました`);
+        error.name = "TimeoutError";
+        reject(error);
+      }, LLM_TIMEOUT_MS);
+    });
+    const run = this.ai.run(this.model, inputs as AiModels[typeof this.model]["inputs"]);
+    return Promise.race([run, timeout]).finally(() => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    });
   }
 }
