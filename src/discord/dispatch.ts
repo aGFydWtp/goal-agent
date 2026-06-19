@@ -228,7 +228,20 @@ export async function dispatchInteraction(
       // 初期 deferred 応答(type5)を即返し、重い処理を waitUntil で継続する(Req 4.1, 4.3)。
       const { run } = result;
       const followup = createFollowup(env, ctxResult.token);
-      ctx.waitUntil(run(followup));
+      // run が reject すると editOriginal が呼ばれず deferred(「考え中…」)が永久固着する。
+      // 例外は必ず捕捉し、理由をログへ出した上でユーザーへ失敗通知へ正規化する。
+      ctx.waitUntil(
+        run(followup).catch(async (cause) => {
+          console.error(
+            `dispatch.deferred: 継続処理が例外で終了 ${
+              cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause)
+            }`,
+          );
+          await followup.editOriginal(
+            "処理中にエラーが発生しました。お手数ですが、もう一度お試しください。",
+          );
+        }),
+      );
       return Response.json(deferred(ephemeralOpts(result.ephemeral)));
     }
     case "modal":

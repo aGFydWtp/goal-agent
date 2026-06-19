@@ -98,6 +98,17 @@ describe("WorkersAiLlmClient.completeJson (Req 4.2, 4.5, design completeJson con
     }
   });
 
+  it("JSON Mode で response がオブジェクト(パース済み)の場合も検証して返す", async () => {
+    // JSON Mode 有効時、Workers AI は response を文字列ではなくオブジェクトで返す。
+    // JSON.parse を通さず、そのまま zod 検証へ渡して成功すること(回帰: invalid_output 化を防ぐ)。
+    const ai = makeAi(async () => ({ response: { score: 0.8, label: "good" } }));
+    const client = new WorkersAiLlmClient(ai, MODEL);
+
+    const result = await client.completeJson({ prompt: "p" }, schema);
+
+    expect(result).toEqual({ ok: true, value: { score: 0.8, label: "good" } });
+  });
+
   it("response_format(json_schema)を付与して JSON Mode を要求する", async () => {
     const run = vi.fn(async () => ({
       response: JSON.stringify({ score: 0.8, label: "good" }),

@@ -2,7 +2,7 @@
 // 利用側は client.ts の LlmClient 契約のみに依存し、本実装を直接 import しない。
 // モデル id はファクトリ(factory.ts)から注入され、本クラスにはハードコードしない(Req 4.4)。
 
-import { z, type ZodType } from "zod"; // zod v4
+import { type ZodType, z } from "zod"; // zod v4
 import type { LlmClient, LlmCompletionRequest, LlmResult } from "./client";
 
 /** Workers AI JSON Mode の response_format(プレーン JSON Schema を渡す)。 */
@@ -17,7 +17,9 @@ interface JsonSchemaResponseFormat {
  * 変換不能なスキーマでは JSON 強制を諦め、従来のプロンプト頼み経路へフォールバックする
  * (undefined を返す)。検証は呼び出し側の zod safeParse が引き続き担保する。
  */
-function toJsonSchemaResponseFormat(schema: ZodType<unknown>): JsonSchemaResponseFormat | undefined {
+function toJsonSchemaResponseFormat(
+  schema: ZodType<unknown>,
+): JsonSchemaResponseFormat | undefined {
   try {
     return { type: "json_schema", json_schema: z.toJSONSchema(schema) };
   } catch {
@@ -59,18 +61,25 @@ export class WorkersAiLlmClient implements LlmClient {
       return text;
     }
 
+    // JSON Mode 有効時、Workers AI は response をパース済みオブジェクトで返す(文字列 JSON ではない)。
+    // 文字列の場合のみ JSON.parse し、既にオブジェクトならそのまま zod 検証へ渡す。
+    const raw: unknown = text.value;
     let parsed: unknown;
-    try {
-      parsed = JSON.parse(text.value);
-    } catch (cause) {
-      return {
-        ok: false,
-        error: {
-          kind: "invalid_output",
-          message: "LLM 応答を JSON としてパースできませんでした",
-          cause,
-        },
-      };
+    if (typeof raw === "string") {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (cause) {
+        return {
+          ok: false,
+          error: {
+            kind: "invalid_output",
+            message: "LLM 応答を JSON としてパースできませんでした",
+            cause,
+          },
+        };
+      }
+    } else {
+      parsed = raw;
     }
 
     const result = schema.safeParse(parsed);

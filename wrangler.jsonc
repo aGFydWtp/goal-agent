@@ -9,6 +9,11 @@
     "binding": "AI",
     "remote": true
   },
+  // Workers Observability(Workers Logs)を有効化。設定ファイルが正のため、これを書かないと
+  // deploy のたびにダッシュボードの有効化が上書きで無効化される。
+  "observability": {
+    "enabled": true
+  },
   "durable_objects": {
     "bindings": [
       {
