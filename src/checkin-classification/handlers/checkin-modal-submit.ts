@@ -39,6 +39,7 @@ import {
   buildCheckinSaveButtonId,
   CHECKIN_INPUT_FIELD_ID,
 } from "../custom-ids";
+import type { ClassifyCheckinResult } from "../domain/checkin-operations";
 import {
   classifyCheckin,
   createPendingCheckinStore,
@@ -55,6 +56,20 @@ const TEXT_INPUT = 4; // ComponentType.TextInput
 const STYLE_SUCCESS = 3; // [保存]
 const STYLE_SECONDARY = 2; // [修正]
 const STYLE_DANGER = 4; // [破棄]
+
+/**
+ * 分類失敗の判別共用体を tail 用の 1 行文字列へ整形する。
+ * goalId は件数のみ出し、実在しない id の中身はログに残さない。
+ */
+function describeFailure(result: Extract<ClassifyCheckinResult, { ok: false }>): string {
+  if (result.reason === "classification_failed") {
+    if ("verificationReason" in result) {
+      return `reason=classification_failed verification=${result.verificationReason} goalIdCount=${result.goalIds.length}`;
+    }
+    return `reason=classification_failed errorKind=${result.errorKind}`;
+  }
+  return `reason=${result.reason}`;
+}
 
 /** 空入力時の ephemeral 通知(分類フローを開始しない / Req 1.4)。 */
 const EMPTY_INPUT_NOTICE = "入力が空でした。今週やったことを入力してから送信してください。";
@@ -149,6 +164,9 @@ async function runClassification(
     rawText,
   });
   if (!result.ok) {
+    // 失敗理由を tail で判別可能にする(ユーザー応答は汎用文言のまま / Req 2.6)。
+    // 生の入力テキストは出さず、列挙値の理由のみをログする。
+    console.error(`checkin.classify: 分類失敗 userId=${userId} ${describeFailure(result)}`);
     await followup.editOriginal(CLASSIFICATION_FAILED_NOTICE);
     return;
   }
