@@ -139,6 +139,12 @@ export class WorkersAiLlmClient implements LlmClient {
       const output = (await this.runWithTimeout(inputs)) as AiTextGenerationOutput;
       return { ok: true, value: output.response ?? "" };
     } catch (cause) {
+      // 診断(一時): ai.run の実際の例外内容をログし、provider_error の真因を確認する。
+      console.error(
+        `workers-ai.runText: AI呼び出し失敗 ${
+          cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause)
+        }`,
+      );
       // 中断/タイムアウトを区別できる場合は timeout、その他の AI 障害は provider_error。
       const aborted =
         cause instanceof Error && (cause.name === "AbortError" || cause.name === "TimeoutError");
