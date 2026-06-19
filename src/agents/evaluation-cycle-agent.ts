@@ -50,6 +50,12 @@ export class EvaluationCycleAgent extends Agent<Env> {
     super(ctx, env);
     runMigrations(this.ctx.storage.sql);
     this.repositoryInstance = createRepository(this.ctx.storage.sql);
+    // 確定前データ保持サーフェス(putEphemeral 等)の永続テーブル。冪等作成。
+    // 非同期 KV API(this.ctx.storage.put)は agents SDK 上で解決せず hang したため、
+    // 実績のある同期 SQLite(this.ctx.storage.sql)で永続化する。
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS ephemeral_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    );
   }
 
   /** このサイクルの権威 SQLite に束ねたリポジトリを返す。 */
@@ -145,25 +151,33 @@ export class EvaluationCycleAgent extends Agent<Env> {
   // ドメイン語を含まない汎用プリミティブ。上位スペックが複数 interaction を跨いで
   // 確定前の一時データを保持するための置き場。値は不透明文字列(JSON 文字列等)で
   // あり、本サーフェスは中身を解釈・検証・スキーマ化しない(利用側が意味付けする)。
-  // 保管先は DO の永続ストレージ(this.ctx.storage)であり、ハイバネーション/再起動を
-  // 跨いでも保持される。再生成不能な確定前データ(pending 分類等)を安全に橋渡しできる。
+  // 保管先は DO の永続 SQLite(this.ctx.storage.sql / ephemeral_kv テーブル)であり、
+  // ハイバネーション/再起動を跨いでも保持される。再生成不能な確定前データ(pending 分類等)
+  // を安全に橋渡しできる。非同期 KV API(this.ctx.storage.put)は agents SDK 上で hang する
+  // ため使わない。
 
   /** key に不透明文字列 value を保持する(既存キーは上書き)。 */
   @callable()
-  async putEphemeral(key: string, value: string): Promise<void> {
-    await this.ctx.storage.put(key, value);
+  putEphemeral(key: string, value: string): void {
+    this.ctx.storage.sql.exec(
+      "INSERT INTO ephemeral_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      key,
+      value,
+    );
   }
 
   /** key の値を返す(無ければ null)。 */
   @callable()
-  async getEphemeral(key: string): Promise<string | null> {
-    const value = await this.ctx.storage.get<string>(key);
-    return value === undefined ? null : value;
+  getEphemeral(key: string): string | null {
+    const row = this.ctx.storage.sql
+      .exec("SELECT value FROM ephemeral_kv WHERE key = ?", key)
+      .toArray()[0];
+    return row === undefined ? null : (row.value as string);
   }
 
   /** key の値を削除する(無キーは no-op)。 */
   @callable()
-  async deleteEphemeral(key: string): Promise<void> {
-    await this.ctx.storage.delete(key);
+  deleteEphemeral(key: string): void {
+    this.ctx.storage.sql.exec("DELETE FROM ephemeral_kv WHERE key = ?", key);
   }
 }
