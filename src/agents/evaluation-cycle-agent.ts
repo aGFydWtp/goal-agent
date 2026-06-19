@@ -35,19 +35,6 @@ export class EvaluationCycleAgent extends Agent<Env> {
   private readonly repositoryInstance: Repository;
 
   /**
-   * 汎用の揮発的インスタンス状態(per-instance KV / Req 3.7-3.9)。
-   *
-   * リクエスト跨ぎ(複数 Discord interaction)で確定前の一時データを保持するための
-   * 基盤プリミティブ。キー/値ともに不透明な文字列として扱い、ドメイン固有の解釈・
-   * 検証・スキーマは持たない(中身の意味付けは利用側スペック所有)。
-   *
-   * 非永続: DO SQLite と異なり永続化されず、DO 再起動/ハイバネーション復帰で消失し
-   * うる。利用側は再生成可能な一時データのみを保持する前提(Req 3.9)。同一論理 DO
-   * インスタンスが生きている間は `getByName` 同名解決でリクエストを跨いで参照できる。
-   */
-  private readonly ephemeralState = new Map<string, string>();
-
-  /**
    * DO インスタンス生成(初回起動およびハイバネーション復帰)時に同期実行される。
    * §11 スキーマを冪等マイグレーションで初期化してから、データ権威リポジトリを束ねる
    * (design.md「スキーマ初期化フロー」/ Req 2.2 のトリガ, Req 3.1)。
@@ -154,27 +141,29 @@ export class EvaluationCycleAgent extends Agent<Env> {
     this.repository().remove(entity, id);
   }
 
-  // ---- 揮発的インスタンス状態サーフェス(汎用 KV / Req 3.7-3.9) ------------
+  // ---- 確定前データ保持サーフェス(汎用 KV / Req 3.7-3.9) ------------
   // ドメイン語を含まない汎用プリミティブ。上位スペックが複数 interaction を跨いで
   // 確定前の一時データを保持するための置き場。値は不透明文字列(JSON 文字列等)で
   // あり、本サーフェスは中身を解釈・検証・スキーマ化しない(利用側が意味付けする)。
+  // 保管先は DO の永続ストレージ(this.ctx.storage)であり、ハイバネーション/再起動を
+  // 跨いでも保持される。再生成不能な確定前データ(pending 分類等)を安全に橋渡しできる。
 
-  /** key に不透明文字列 value を揮発保持する(既存キーは上書き)。 */
+  /** key に不透明文字列 value を保持する(既存キーは上書き)。 */
   @callable()
-  putEphemeral(key: string, value: string): void {
-    this.ephemeralState.set(key, value);
+  async putEphemeral(key: string, value: string): Promise<void> {
+    await this.ctx.storage.put(key, value);
   }
 
-  /** key の揮発値を返す(無ければ null)。 */
+  /** key の値を返す(無ければ null)。 */
   @callable()
-  getEphemeral(key: string): string | null {
-    const value = this.ephemeralState.get(key);
+  async getEphemeral(key: string): Promise<string | null> {
+    const value = await this.ctx.storage.get<string>(key);
     return value === undefined ? null : value;
   }
 
-  /** key の揮発値を削除する(無キーは no-op)。 */
+  /** key の値を削除する(無キーは no-op)。 */
   @callable()
-  deleteEphemeral(key: string): void {
-    this.ephemeralState.delete(key);
+  async deleteEphemeral(key: string): Promise<void> {
+    await this.ctx.storage.delete(key);
   }
 }
