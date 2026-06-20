@@ -1,11 +1,13 @@
 import type { APIInteraction } from "discord-api-types/v10";
 import { InteractionType } from "discord-interactions";
 
+import { enqueueDeferredContinuation } from "./continuation";
 import type { DiscordEnv } from "./env";
 import { createFollowup } from "./followup";
 import { lookupHandler } from "./registry";
 import { deferred, modal, type ResponseOptions, reply } from "./response";
 import type {
+  DeferredContinuationEnvelope,
   InteractionContext,
   InteractionKind,
   MessageActionRow,
@@ -253,10 +255,37 @@ export async function dispatchInteraction(
           components: result.components,
         }),
       );
+    case "deferred-persistent": {
+      // budget(waitUntil)を超えうる継続を初期応答ライフタイムから切り離す(Req 8.1)。
+      // type5(DEFERRED)を即返し、waitUntil で primary cycle agent へ継続を enqueue する。
+      // envelope は ctx.token・DISCORD_APPLICATION_ID・継続キー・payload から組み立てる。
+      // enqueue 自体の失敗は失敗 follow-up へフォールバックし、deferred(「考え中…」)の
+      // 固着を防ぐ(Req 8.5)。本処理(分類・判定・生成)は alarm 側で走るためここでは待たない。
+      const { continuation, ephemeral } = result;
+      const envelope: DeferredContinuationEnvelope = {
+        interactionToken: ctxResult.token,
+        applicationId: env.DISCORD_APPLICATION_ID,
+        continuationKey: continuation.key,
+        payload: continuation.payload,
+      };
+      ctx.waitUntil(
+        enqueueDeferredContinuation(env, ctxResult.userId, envelope).catch(async (cause) => {
+          console.error(
+            `dispatch.deferred-persistent: enqueue 失敗 ${
+              cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause)
+            }`,
+          );
+          await createFollowup(env, ctxResult.token).editOriginal(
+            "処理中にエラーが発生しました。お手数ですが、もう一度お試しください。",
+          );
+        }),
+      );
+      return Response.json(deferred(ephemeralOpts(ephemeral)));
+    }
     default:
-      // `mode:"deferred-persistent"`(Req 8.1)は型契約のみ先行公開済み。dispatch への配線
-      // (type5 即返し + waitUntil enqueue)は task 7.5 が所有する。それまでは未配線変種を
-      // ephemeral エラーへ正規化し、deferred 表示が固着しないようにする(Req 8.5 と同趣旨)。
+      // 既知の 4 変種(reply/deferred/deferred-persistent/modal)以外は規約外。型上は到達
+      // しないが、ランタイム安全のため判別可能なエラーへ正規化する(bare satisfies never では
+      // 戻り値経路を満たさない)。
       return errorResponse("この操作は現在利用できません。");
   }
 }

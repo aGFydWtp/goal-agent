@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// dispatch は `./continuation`→`../agents/routing`(→ `agents` / `cloudflare:`)を推移的に
+// import する。node プロジェクトでは `cloudflare:` ローダ非対応のため routing をモックして
+// 鎖を断つ(本テストは deferred-persistent 経路を踏まないため benign stub で十分)。
+vi.mock("../src/agents/routing", () => ({
+  PRIMARY_CYCLE_KEY: "primary",
+  getCycleAgent: vi.fn(async () => ({ scheduleDeferredContinuation: vi.fn(async () => {}) })),
+}));
 
 import { dispatchInteraction } from "../src/discord/dispatch";
 import type { DiscordEnv } from "../src/discord/env";

@@ -1,15 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { dispatchInteraction } from "../src/discord/dispatch";
 import type { DiscordEnv } from "../src/discord/env";
-import { registerHandler, resetDefaultRegistry } from "../src/discord/registry";
 import type {
+  DeferredContinuationEnvelope,
   Followup,
   HandlerResult,
   InteractionContext,
   InteractionHandler,
   MessageActionRow,
 } from "../src/discord/types";
+
+// `../src/discord/continuation` は `../src/agents/routing`(→ `agents` / `cloudflare:`)を
+// 推移的に import するため、node プロジェクトでは substrate を丸ごとモックして
+// `cloudflare:` ローダエラーと DO 依存を断つ。dispatch が必要とするのは
+// `enqueueDeferredContinuation` のみ(他 export は当テストで未使用)。
+const enqueueDeferredContinuation = vi.fn<
+  (env: DiscordEnv, userId: string, envelope: DeferredContinuationEnvelope) => Promise<void>
+>(async () => {});
+vi.mock("../src/discord/continuation", () => ({
+  enqueueDeferredContinuation: (...args: unknown[]) =>
+    enqueueDeferredContinuation(...(args as [DiscordEnv, string, DeferredContinuationEnvelope])),
+}));
+
+// followup は実装を保持し(既存 deferred テストが実 createFollowup→fetch を使うため)、
+// 失敗フォールバック検証時のみ spyOn でモックできるよう名前空間 import を別途行う。
+import * as followupModule from "../src/discord/followup";
+
+// モック確立後に対象モジュールを import する(vi.mock は巻き上げられるため順序非依存だが、
+// 意図を明示するため substrate モック宣言の後に置く)。
+import { dispatchInteraction } from "../src/discord/dispatch";
+import { registerHandler, resetDefaultRegistry } from "../src/discord/registry";
 
 // interaction ディスパッチャ(task 3.2)のユニットテスト
 // (Req 1.6, 3.1-3.5, 4.1-4.3, 4.7)。
@@ -137,6 +157,10 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   resetDefaultRegistry();
   vi.restoreAllMocks();
+  // substrate モックは巻き上げ宣言した永続 vi.fn のため、各テスト前に呼び出し履歴と
+  // 一時実装(mockImplementationOnce / mockRejectedValueOnce)を消し、既定の resolve に戻す。
+  enqueueDeferredContinuation.mockReset();
+  enqueueDeferredContinuation.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -432,5 +456,107 @@ describe("dispatchInteraction: ハンドラ例外の正規化", () => {
     expect(data.flags).toBe(64);
     // 例外メッセージの生データ(個人 ID 等)を露出しない。
     expect(data.content as string).not.toContain("user-guild");
+  });
+});
+
+describe("dispatchInteraction: deferred-persistent(type5)→ waitUntil → enqueue(Req 8.1, 8.5)", () => {
+  const continuationResult: HandlerResult = {
+    mode: "deferred-persistent",
+    continuation: { key: "checkin:classify", payload: { note: "今日は走った", goalId: "g-1" } },
+  };
+
+  it("deferred-persistent ハンドラは type5 を即返し、本処理(enqueue)を waitUntil に登録する", async () => {
+    // enqueue がゲートで保留中でも初期応答(type5)が即返ることを検証する(3 秒以内 / Req 8.1)。
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    enqueueDeferredContinuation.mockImplementationOnce(async () => {
+      await gate;
+    });
+
+    const { handler } = handlerReturning(continuationResult);
+    registerHandler("command", "persist", handler);
+    const { ctx, scheduled } = fakeCtx();
+
+    const res = await dispatchInteraction(commandInteraction("persist"), env, ctx);
+
+    // 初期応答: type5 即返。enqueue はゲート保留中でまだ完了していないが waitUntil には登録済み。
+    expect(res.status).toBe(200);
+    const body = await bodyOf(res);
+    expect(body.type).toBe(5); // DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
+    expect(scheduled).toHaveLength(1);
+
+    release();
+    await Promise.all(scheduled);
+    expect(enqueueDeferredContinuation).toHaveBeenCalledTimes(1);
+  });
+
+  it("envelope を ctx.token / DISCORD_APPLICATION_ID / 継続キー / payload から組み立て、実行ユーザー ID で enqueue する", async () => {
+    const { handler } = handlerReturning(continuationResult);
+    registerHandler("command", "persist", handler);
+    const { ctx, scheduled } = fakeCtx();
+
+    await dispatchInteraction(commandInteraction("persist"), env, ctx);
+    await Promise.all(scheduled);
+
+    expect(enqueueDeferredContinuation).toHaveBeenCalledTimes(1);
+    const [calledEnv, userId, envelope] = enqueueDeferredContinuation.mock.calls[0] as [
+      DiscordEnv,
+      string,
+      DeferredContinuationEnvelope,
+    ];
+    expect(calledEnv).toBe(env);
+    expect(userId).toBe("user-guild"); // commandInteraction の member.user.id
+    expect(envelope).toEqual({
+      interactionToken: "tok-cmd",
+      applicationId: "app-123",
+      continuationKey: "checkin:classify",
+      payload: { note: "今日は走った", goalId: "g-1" },
+    });
+  });
+
+  it("ephemeral deferred-persistent は初期応答に flag 64 を立てる", async () => {
+    const { handler } = handlerReturning({
+      mode: "deferred-persistent",
+      ephemeral: true,
+      continuation: { key: "k", payload: {} },
+    });
+    registerHandler("command", "persistsecret", handler);
+    const { ctx, scheduled } = fakeCtx();
+
+    const res = await dispatchInteraction(commandInteraction("persistsecret"), env, ctx);
+    await Promise.all(scheduled);
+
+    const body = await bodyOf(res);
+    expect(body.type).toBe(5);
+    expect(body.data).toEqual({ flags: 64 });
+  });
+
+  it("enqueue 自体が失敗したら、失敗 follow-up(editOriginal)を送って deferred 固着を防ぐ(Req 8.5)", async () => {
+    enqueueDeferredContinuation.mockRejectedValueOnce(new Error("seam unavailable"));
+    const editOriginal = vi.fn<Followup["editOriginal"]>(async () => ({ ok: true }));
+    const send = vi.fn<Followup["send"]>(async () => ({ ok: true }));
+    const createFollowupSpy = vi
+      .spyOn(followupModule, "createFollowup")
+      .mockReturnValue({ editOriginal, send } as Followup);
+
+    const { handler } = handlerReturning(continuationResult);
+    registerHandler("command", "persistfail", handler);
+    const { ctx, scheduled } = fakeCtx();
+
+    const res = await dispatchInteraction(commandInteraction("persistfail"), env, ctx);
+
+    // 初期応答は type5 のまま即返る(enqueue 失敗は waitUntil 側で処理される)。
+    expect((await bodyOf(res)).type).toBe(5);
+
+    await Promise.all(scheduled);
+
+    // 失敗フォールバック: 同一 interaction token で followup を作り editOriginal で失敗通知。
+    expect(createFollowupSpy).toHaveBeenCalledWith(env, "tok-cmd");
+    expect(editOriginal).toHaveBeenCalledTimes(1);
+    const [content] = editOriginal.mock.calls[0] as [string];
+    expect(typeof content).toBe("string");
+    expect(content.length).toBeGreaterThan(0);
   });
 });

@@ -193,7 +193,7 @@
   - _Boundary: Deferred Continuation Seam (infra agents/evaluation-cycle-agent)_
   - _Depends: 7.3_
 
-- [ ] 7.5 deferred-persistent を dispatch に配線
+- [x] 7.5 deferred-persistent を dispatch に配線
   - ディスパッチャが `mode:"deferred-persistent"` を受けた際に type5(DEFERRED)を即返し、`ctx.waitUntil` 内で enqueue ヘルパーを呼んで primary cycle agent へ継続を登録する
   - envelope を `ctx.token`・`env.DISCORD_APPLICATION_ID`・継続キー・payload から組み立て、enqueue 自体の失敗時は失敗 follow-up へフォールバックして deferred 固着を防ぐ
   - 完了状態: deferred-persistent ハンドラで type5 が 3 秒以内に即返り、waitUntil で enqueue が呼ばれ、enqueue 失敗時に失敗 follow-up が送られることを確認できる
