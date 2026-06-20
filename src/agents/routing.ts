@@ -16,6 +16,17 @@ import { cycleAgentName, goalAgentName } from "./ids";
  */
 
 /**
+ * ユーザー単位データホーム(ユーザーの全 cycle/goal/evidence データを集約する単一
+ * EvaluationCycleAgent インスタンス)のルーティングキー。infra-foundation 所有の共有規約。
+ *
+ * `getCycleAgent(env, userId, PRIMARY_CYCLE_KEY)` で `evaluation:{userId}:primary` に解決し、
+ * 同一ユーザーの操作は常に同一論理 DO へ着地する。複数スペック(gateway の継続 enqueue /
+ * goal-management / status-and-draft / checkin-classification)が上流から consume する共有鍵で
+ * あるため、リテラル `"primary"` は本層にのみ定義し、下位スペックでは再定義しない。
+ */
+export const PRIMARY_CYCLE_KEY = "primary";
+
+/**
  * (userId, cycleId) から EvaluationCycleAgent(サイクル単位のデータ権威)を取得する
  * (Req 3.3)。`evaluation:{userId}:{cycleId}` 名で名前解決する。
  */

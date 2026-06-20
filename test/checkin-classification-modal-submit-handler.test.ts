@@ -63,6 +63,7 @@ function doFor(userId: string): FakeDo {
 }
 
 vi.mock("../src/agents/routing", () => ({
+  PRIMARY_CYCLE_KEY: "primary",
   getCycleAgent: async (_env: unknown, userId: string) => doFor(userId).stub,
   getGoalAgent: async (_env: unknown, userId: string) => doFor(userId).stub,
 }));

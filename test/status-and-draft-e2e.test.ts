@@ -94,6 +94,7 @@ function ephemeralStub(): {
 }
 
 vi.mock("../src/agents/routing", () => ({
+  PRIMARY_CYCLE_KEY: "primary",
   getCycleAgent: async (..._args: unknown[]) => ephemeralStub(),
   getGoalAgent: async (..._args: unknown[]) => ephemeralStub(),
 }));

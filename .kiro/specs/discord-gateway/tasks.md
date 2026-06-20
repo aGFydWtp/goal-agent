@@ -168,7 +168,7 @@
   - _Boundary: Interaction 型・ハンドラ規約_
   - _Depends: 1.2_
 
-- [ ] 7.2 (P) ユーザー単位データホーム鍵を infra routing へ昇格
+- [x] 7.2 (P) ユーザー単位データホーム鍵を infra routing へ昇格
   - 現状 goal-management が所有するユーザー単位データホーム鍵 `PRIMARY_CYCLE_KEY`(`"primary"`)を infra-foundation の `agents/routing.ts` へ移動・export し、ゲートウェイの継続 enqueue が上流から consume できるようにする
   - 既存 consumer(goal-management / status-and-draft)の import 元を infra routing へ差し替える(規約の意味は不変・追加的変更で、リテラル `"primary"` を各所で再定義しない)
   - 完了状態: `PRIMARY_CYCLE_KEY` が infra routing から export され、全 consumer が同一鍵を上流から参照し、プロジェクト全体の型チェックと既存テストが緑のまま通る

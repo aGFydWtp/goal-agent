@@ -10,12 +10,11 @@
 // `PendingCheckinStore` と橋渡しする async ラッパに変換する。ドメインロジックは worker 側
 // (domain)に留め、Agent へはドメインメソッドを追加しない(infra boundary / Req 6.2 適合)。
 //
-// 依存方向: handlers → routing → infra `getCycleAgent` / goal-management `PRIMARY_CYCLE_KEY` /
+// 依存方向: handlers → routing → infra `getCycleAgent` / infra `PRIMARY_CYCLE_KEY` /
 // 自スペック domain(左方向のみ)。
 
-import { getCycleAgent } from "../agents/routing";
+import { getCycleAgent, PRIMARY_CYCLE_KEY } from "../agents/routing";
 import type { DiscordEnv } from "../discord/env";
-import { PRIMARY_CYCLE_KEY } from "../goal-management/routing";
 import {
   createPendingCheckinStore,
   type PendingCheckinClassification,

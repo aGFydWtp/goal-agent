@@ -6,23 +6,17 @@
 // 本スペックはユーザーの全 cycle/goal/evidence データを単一の EvaluationCycleAgent
 // インスタンス(`evaluation:{userId}:primary`)へ集約する。論理サイクル id
 // (`evaluation_cycles.id`)は `/cycle create` ごとに生成して行に保持し、DO ルーティングには
-// 用いない。この規約は本モジュールに定義・export し、下流スペックも同一規約に従う
-// (infra-foundation の変更は不要)。
+// 用いない。データホーム鍵 `PRIMARY_CYCLE_KEY` は infra-foundation の `agents/routing.ts`
+// が所有する共有規約であり、本モジュールはそこから consume する(リテラル `"primary"` を
+// 再定義しない。依存方向を上流のみに保つ)。
 //
-// 依存方向: handlers → routing → infra `getCycleAgent`/`getGoalAgent`(左方向のみ)。
+// 依存方向: handlers → routing → infra `getCycleAgent`/`getGoalAgent`/`PRIMARY_CYCLE_KEY`
+// (左方向のみ)。
 
-import { getCycleAgent, getGoalAgent } from "../agents/routing";
+import { getCycleAgent, getGoalAgent, PRIMARY_CYCLE_KEY } from "../agents/routing";
 import type { DiscordEnv } from "../discord/env";
 import type { EntityName, EntityRow } from "../types";
 import type { CycleDataAuthority } from "./domain/cycle-operations";
-
-/**
- * ユーザーの全 cycle/goal/evidence データを集約する単一 DO のルーティングキー。
- *
- * `getCycleAgent(env, userId, PRIMARY_CYCLE_KEY)` で `evaluation:{userId}:primary` に解決し、
- * 同一ユーザーの操作は常に同一論理 DO へ着地する。
- */
-export const PRIMARY_CYCLE_KEY = "primary";
 
 /**
  * 実行ユーザーのデータ権威(EvaluationCycleAgent, `evaluation:{userId}:primary`)を取得する。
