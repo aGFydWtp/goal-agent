@@ -175,7 +175,7 @@
   - _Requirements: 8.2_
   - _Boundary: infra routing (agents/routing.ts)_
 
-- [ ] 7.3 永続的継続 substrate を実装
+- [x] 7.3 永続的継続 substrate を実装
   - 継続レジストリ(`registerContinuation`/`lookupContinuation`: 継続キー → `Continuation`、未登録キーで null)を module スコープの登録状態として実装する
   - enqueue ヘルパーを実装し、`getCycleAgent(env, userId, PRIMARY_CYCLE_KEY)` でユーザー自身のホーム Agent を取得して seam メソッド(7.4 で追加)へ envelope を渡し `this.schedule(0, ...)` 登録を依頼する(所有者スコープは Agent 名の userId で構造的に閉じる)
   - substrate runner を実装し、alarm 実行時に envelope の interactionToken/applicationId から Followup を再構築 → 継続キーで Continuation を照合・実行 → 成功で本応答 follow-up(editOriginal)を送出。継続キー未登録・継続例外・token 失効はいずれも失敗 follow-up を送り「考え中…」固着を防ぐ
