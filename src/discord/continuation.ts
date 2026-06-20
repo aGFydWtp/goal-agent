@@ -137,10 +137,7 @@ export async function runScheduledContinuation(
   try {
     await continuation(env, envelope.payload, instrumented.followup);
   } catch (error) {
-    console.error(
-      `[continuation] 継続実行で例外: key="${envelope.continuationKey}"`,
-      error,
-    );
+    console.error(`[continuation] 継続実行で例外: key="${envelope.continuationKey}"`, error);
     await sendFailureFollowup(followup);
     return;
   }
