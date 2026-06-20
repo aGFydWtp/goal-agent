@@ -201,7 +201,7 @@
   - _Boundary: Interaction Dispatcher_
   - _Depends: 7.3, 3.2_
 
-- [ ] 7.6 継続レジストリと substrate のユニットテスト
+- [x] 7.6 継続レジストリと substrate のユニットテスト
   - 継続レジストリの register/lookup 往復・未登録キーで null を検証する
   - `runScheduledContinuation` が継続成功で本応答 editOriginal を呼ぶ、継続例外で失敗 follow-up を送る、継続キー未登録で失敗 follow-up を送る、envelope の token/applicationId から Followup を構築することを検証する
   - 継続登録の isolate 存在保証: DO を export するモジュールグラフ(`src/index.ts`)を評価した後、top-level 登録した継続キーが `lookupContinuation` で解決できることを workers/DO 実行コンテキスト相当で固定し、lazy/fetch 経路限定登録への退行を防ぐ

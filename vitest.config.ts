@@ -29,6 +29,7 @@ export default defineConfig({
             "test/evaluation-cycle-agent-ephemeral.test.ts",
             "test/notifications-agent-wiring.test.ts",
             "test/discord-continuation-seam.test.ts",
+            "test/discord-continuation-isolate.test.ts",
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",
@@ -61,6 +62,8 @@ export default defineConfig({
             "test/notifications-agent-wiring.test.ts",
             // deferred-continuation seam 配線(task 7.4, Req 8.2, 8.8)。scheduleDeferredContinuation の one-shot 登録 + runDeferredContinuation の substrate 委譲を DO ランタイムで検証する。
             "test/discord-continuation-seam.test.ts",
+            // 継続レジストリ/runner/isolate 存在保証(task 7.6, Req 8.3-8.6)。src/index(DO export)評価後の top-level 継続登録が workerd 上で lookup 解決できることを固定する。
+            "test/discord-continuation-isolate.test.ts",
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",
