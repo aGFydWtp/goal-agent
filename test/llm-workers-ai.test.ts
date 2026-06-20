@@ -124,6 +124,33 @@ describe("WorkersAiLlmClient.completeJson (Req 4.2, 4.5, design completeJson con
     expect(responseFormat.json_schema).toBeTypeOf("object");
   });
 
+  it("maxTokens 未指定の JSON 呼び出しは truncate 防止の既定 max_tokens を付与する", async () => {
+    // 回帰: max_tokens 未指定だと Workers AI 既定値が小さく、複数項目の分類 JSON が truncate されて
+    // JSON.parse 失敗 → invalid_output になる。JSON 経路では十分大きい既定が必ず渡ること。
+    const run = vi.fn(async () => ({
+      response: JSON.stringify({ score: 0.8, label: "good" }),
+    }));
+    const client = new WorkersAiLlmClient(makeAi(run), MODEL);
+
+    await client.completeJson({ prompt: "p" }, schema);
+
+    const [, inputs] = run.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(typeof inputs.max_tokens).toBe("number");
+    expect(inputs.max_tokens as number).toBeGreaterThanOrEqual(2048);
+  });
+
+  it("maxTokens 明示指定時は呼び出し側の値を尊重する(既定で上書きしない)", async () => {
+    const run = vi.fn(async () => ({
+      response: JSON.stringify({ score: 0.8, label: "good" }),
+    }));
+    const client = new WorkersAiLlmClient(makeAi(run), MODEL);
+
+    await client.completeJson({ prompt: "p", maxTokens: 128 }, schema);
+
+    const [, inputs] = run.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(inputs.max_tokens).toBe(128);
+  });
+
   it("complete(非 JSON)は response_format を付与しない", async () => {
     const run = vi.fn(async () => ({ response: "ok" }));
     const client = new WorkersAiLlmClient(makeAi(run), MODEL);

@@ -9,15 +9,18 @@ import { WorkersAiLlmClient } from "./workers-ai";
 
 // プロバイダ/モデル選択の単一集約点。変更時はここだけを編集する(Req 4.4)。
 //
-// JSON Mode(response_format: json_schema)対応モデルを選ぶ。当初の invalid_output は
-// モデルの賢さではなく応答(object)の受け取りバグが原因で、それは completeJson 側で解消済み。
-// 70B は JSON Mode の guided 生成が重く Workers AI 上で応答が返らず「考え中」hang を招いたため、
-// JSON Mode 対応・非廃止・ライセンスゲート無し・低〜中レイテンシのモデルを採用する。
+// JSON Mode(response_format: json_schema)で出力をスキーマ準拠 JSON に拘束できるモデルを選ぶ。
+// 本番で間欠していた invalid_output の真因は「モデルが JSON Mode 非対応」でも「賢さ不足」でもなく、
+// completeJson が max_tokens を渡しておらず Workers AI 既定値が小さいため、現実的な週次チェックイン
+// (複数活動 × 複数目標)の分類 JSON が途中で truncate され JSON.parse 失敗していたこと。短い入力は
+// 収まるため再現せず、長い入力でのみ失敗していた。修正は workers-ai.ts(JSON_MODE_DEFAULT_MAX_TOKENS)。
 // 経緯: 2026-05-30 に旧世代(llama-3-8b / hermes-2-pro 等)が一斉廃止され実行時 AiError 5028、
-// llama-3.2-11b-vision はライセンス未同意で AiError 5016、70B は guided 生成が重く応答 hang。
-// 実スキーマで複数モデルを実測(/__admin/ai-probe)した結果、qwen2.5-coder-32b が
-// 「スキーマ遵守が堅牢・出力/レイテンシともに最も一貫(~7s)・廃止/ゲート無し」で最良だった。
-// 速度最優先なら llama-3.2-3b-instruct(~1.5s)へ1行変更可(分解の一貫性はやや劣る)。
+// llama-3.2-11b-vision はライセンス未同意で AiError 5016、llama-3.1-8b-fp8 は AiError 5025(JSON Schema
+// 非対応)、llama-3.1-8b-awq は AiError 5028(廃止)。実モデル実測(wrangler dev --remote)では
+// qwen2.5-coder-32b が「目標リンクが正確・JSON Mode 準拠・廃止/ゲート無し」で品質最良(~24s)、
+// llama-3.3-70b-fp8-fast は品質最良だが ~30s、llama-3.2-3b は ~2s と高速だが目標リンクを取りこぼす。
+// deferred 継続(editOriginal は最大 15 分有効)で待てるため品質優先で qwen を採る。timeout は
+// workers-ai.ts の LLM_TIMEOUT_MS=45s で実測レイテンシに合わせる。
 const MODEL: keyof AiModels = "@cf/qwen/qwen2.5-coder-32b-instruct";
 
 /**
