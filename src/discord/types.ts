@@ -153,13 +153,41 @@ export interface MessageOptions {
 }
 
 /**
- * ハンドラが宣言できる応答結果 (Req 4.1, 4.7, 4.8)。
+ * JSON シリアライズ可能な値 (Req 8.3)。
+ *
+ * DO-backed 永続継続の payload は Durable Object の alarm(scheduled 実行)を介して
+ * 運ばれるため、JSON シリアライズ可能でなければならない。`any` を使わず、プリミティブ・
+ * 配列・ネストオブジェクトを再帰的に表現する。
+ */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { readonly [key: string]: JsonValue }
+  | readonly JsonValue[];
+
+/**
+ * 永続継続へ渡す JSON シリアライズ可能な payload (Req 8.3, 8.6)。
+ *
+ * {@link HandlerResult} の `deferred-persistent` 変種・{@link Continuation}・
+ * {@link DeferredContinuationEnvelope} が共有する業務入力。string キーの
+ * {@link JsonValue} マップ。再生成不能な確定前データを含みうる。
+ */
+export type ContinuationPayload = { readonly [key: string]: JsonValue };
+
+/**
+ * ハンドラが宣言できる応答結果 (Req 4.1, 4.7, 4.8, 8.1)。
  *
  * - `"reply"`: 即時応答(Discord response type 4)。任意で {@link MessageActionRow} 群を
  *   `components` に載せられる (Req 4.8)。
  * - `"deferred"`: deferred 応答。`run` が {@link Followup} 経由で本応答を送る。button は
  *   deferred 初期応答ではなく follow-up(`editOriginal` / `send`)の `components` で送る
  *   (Req 4.9 / design L358)。
+ * - `"deferred-persistent"`: budget(`waitUntil`)を超えうる継続を初期応答ライフタイムから
+ *   切り離して走らせる DO-backed 永続継続 (Req 8.1)。クロージャでなく継続キー + シリアライズ
+ *   可能 payload を宣言し、業務本体は継続レジストリに登録された {@link Continuation} が担う
+ *   (Req 8.6, 8.8)。
  * - `"modal"`: modal を開く(response type 9)。`customId` / `title` / text input
  *   群を {@link ModalActionRow} で宣言する (Req 4.7)。modal 用 action row は message 用
  *   {@link MessageActionRow} と型レベルで区別される。
@@ -167,7 +195,43 @@ export interface MessageOptions {
 export type HandlerResult =
   | { mode: "reply"; ephemeral?: boolean; content: string; components?: MessageActionRow[] }
   | { mode: "deferred"; ephemeral?: boolean; run: (followup: Followup) => Promise<void> }
+  | {
+      mode: "deferred-persistent";
+      ephemeral?: boolean;
+      continuation: { key: string; payload: ContinuationPayload };
+    }
   | { mode: "modal"; customId: string; title: string; components: ModalActionRow[] };
+
+/**
+ * 継続レジストリに登録する業務継続関数 (Req 8.6, 8.8)。
+ *
+ * `this` ではなく {@link DiscordEnv} と {@link ContinuationPayload} から authority を
+ * 再取得して走り、{@link Followup} で本応答を送る。中身(分類・判定・生成の内容)は各機能
+ * スペックが所有し、ゲートウェイは実行 substrate のみを所有する (Req 8.8)。
+ */
+export type Continuation = (
+  env: DiscordEnv,
+  payload: ContinuationPayload,
+  followup: Followup,
+) => Promise<void>;
+
+/**
+ * DO alarm へ運ぶ封筒 (Req 8.3)。
+ *
+ * 永続継続を起動する際、follow-up に必要な interaction token・application id・継続レジストリ
+ * のキー・業務 payload を継続実行コンテキストへ受け渡す (Req 8.3, 8.4, 8.6)。全フィールドが
+ * JSON シリアライズ可能でなければ DO scheduled 実行を介して運べない。
+ */
+export interface DeferredContinuationEnvelope {
+  /** follow-up 用 interaction token (Req 8.3, 8.4)。 */
+  readonly interactionToken: string;
+  /** follow-up webhook URL 構築用 application id (Req 8.3)。 */
+  readonly applicationId: string;
+  /** 継続レジストリのキー (Req 8.6)。 */
+  readonly continuationKey: string;
+  /** 業務入力(再生成不能な確定前データを含みうる)。 */
+  readonly payload: ContinuationPayload;
+}
 
 /**
  * modal の action row (Req 4.7)。

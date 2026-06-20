@@ -253,5 +253,10 @@ export async function dispatchInteraction(
           components: result.components,
         }),
       );
+    default:
+      // `mode:"deferred-persistent"`(Req 8.1)は型契約のみ先行公開済み。dispatch への配線
+      // (type5 即返し + waitUntil enqueue)は task 7.5 が所有する。それまでは未配線変種を
+      // ephemeral エラーへ正規化し、deferred 表示が固着しないようにする(Req 8.5 と同趣旨)。
+      return errorResponse("この操作は現在利用できません。");
   }
 }

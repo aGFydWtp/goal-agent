@@ -33,6 +33,7 @@
     "test/discord-registry.test.ts",
     "test/discord-dispatch.test.ts",
     "test/discord-button-types.test.ts",
+    "test/discord-continuation-types.test.ts",
     "test/discord-button-contract.test.ts",
     "test/discord-command-definitions.test.ts",
     "test/discord-command-register.test.ts",

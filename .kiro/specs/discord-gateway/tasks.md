@@ -159,9 +159,69 @@
   - _Requirements: 4.8, 4.9, 4.10, 4.11_
   - _Depends: 6.4, 6.3_
 
+- [ ] 7. Req 8: DO-backed 永続的 deferred 継続 substrate
+- [x] 7.1 永続的継続の型契約を追加
+  - HandlerResult に DO-backed deferred 変種(`mode:"deferred-persistent"`: 継続キー + シリアライズ可能 payload)を純加算し、既存の reply/deferred/modal 変種は変更しない
+  - 継続業務関数型 `Continuation`(env + payload + Followup を受ける)、DO alarm へ運ぶ封筒 `DeferredContinuationEnvelope`(interactionToken/applicationId/continuationKey/payload)、JSON シリアライズ可能な `ContinuationPayload`/`JsonValue` 型を公開する
+  - 完了状態: 下位スペックが import できる deferred-persistent 変種・Continuation・envelope・payload 型が公開され、追加は型への純加算でプロジェクト全体の型チェックが緑のまま通る
+  - _Requirements: 8.1, 8.3, 8.6, 8.8_
+  - _Boundary: Interaction 型・ハンドラ規約_
+  - _Depends: 1.2_
+
+- [ ] 7.2 (P) ユーザー単位データホーム鍵を infra routing へ昇格
+  - 現状 goal-management が所有するユーザー単位データホーム鍵 `PRIMARY_CYCLE_KEY`(`"primary"`)を infra-foundation の `agents/routing.ts` へ移動・export し、ゲートウェイの継続 enqueue が上流から consume できるようにする
+  - 既存 consumer(goal-management / status-and-draft)の import 元を infra routing へ差し替える(規約の意味は不変・追加的変更で、リテラル `"primary"` を各所で再定義しない)
+  - 完了状態: `PRIMARY_CYCLE_KEY` が infra routing から export され、全 consumer が同一鍵を上流から参照し、プロジェクト全体の型チェックと既存テストが緑のまま通る
+  - _Requirements: 8.2_
+  - _Boundary: infra routing (agents/routing.ts)_
+
+- [ ] 7.3 永続的継続 substrate を実装
+  - 継続レジストリ(`registerContinuation`/`lookupContinuation`: 継続キー → `Continuation`、未登録キーで null)を module スコープの登録状態として実装する
+  - enqueue ヘルパーを実装し、`getCycleAgent(env, userId, PRIMARY_CYCLE_KEY)` でユーザー自身のホーム Agent を取得して seam メソッド(7.4 で追加)へ envelope を渡し `this.schedule(0, ...)` 登録を依頼する(所有者スコープは Agent 名の userId で構造的に閉じる)
+  - substrate runner を実装し、alarm 実行時に envelope の interactionToken/applicationId から Followup を再構築 → 継続キーで Continuation を照合・実行 → 成功で本応答 follow-up(editOriginal)を送出。継続キー未登録・継続例外・token 失効はいずれも失敗 follow-up を送り「考え中…」固着を防ぐ
+  - pending KV 保持には触れず、継続関数の内部で各機能が既存規約のまま保持できるよう Followup と payload のみを渡す
+  - 完了状態: 継続レジストリの登録/照合往復が成立し、enqueue が primary cycle agent seam へ envelope を渡し、runner が成功時のみ本応答 follow-up・失敗時は失敗 follow-up を送る substrate が公開される。enqueue は seam メソッド(7.4 追加)を呼ぶ wiring-root 相互参照で、7.4 完了で疎通が閉じる
+  - _Requirements: 8.1, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8_
+  - _Boundary: Persistent Continuation Substrate_
+  - _Depends: 7.1, 7.2, 2.4_
+
+- [ ] 7.4 infra Agent に deferred-continuation seam を追加
+  - `EvaluationCycleAgent` に `@callable` の登録メソッド(envelope を受け `this.schedule(0, "runDeferredContinuation", envelope)`)と alarm callback `runDeferredContinuation(envelope)` を追加する。callback 本体はゲートウェイ substrate runner(`runScheduledContinuation`)へ委譲する薄い配線で、`fireWeeklyCheckin` と同型・業務ロジックを持たない
+  - この変更は infra-foundation への revalidation trigger であり、`this.schedule()` 実行基盤自体は再定義しない
+  - 完了状態: enqueue 経由で seam の登録メソッドが envelope 付きで呼ばれ alarm が登録され、alarm 発火時に callback が substrate runner へ委譲する疎通が成立する(seam は業務ロジックを持たない)
+  - _Requirements: 8.2, 8.8_
+  - _Boundary: Deferred Continuation Seam (infra agents/evaluation-cycle-agent)_
+  - _Depends: 7.3_
+
+- [ ] 7.5 deferred-persistent を dispatch に配線
+  - ディスパッチャが `mode:"deferred-persistent"` を受けた際に type5(DEFERRED)を即返し、`ctx.waitUntil` 内で enqueue ヘルパーを呼んで primary cycle agent へ継続を登録する
+  - envelope を `ctx.token`・`env.DISCORD_APPLICATION_ID`・継続キー・payload から組み立て、enqueue 自体の失敗時は失敗 follow-up へフォールバックして deferred 固着を防ぐ
+  - 完了状態: deferred-persistent ハンドラで type5 が 3 秒以内に即返り、waitUntil で enqueue が呼ばれ、enqueue 失敗時に失敗 follow-up が送られることを確認できる
+  - _Requirements: 8.1, 8.5_
+  - _Boundary: Interaction Dispatcher_
+  - _Depends: 7.3, 3.2_
+
+- [ ] 7.6 継続レジストリと substrate のユニットテスト
+  - 継続レジストリの register/lookup 往復・未登録キーで null を検証する
+  - `runScheduledContinuation` が継続成功で本応答 editOriginal を呼ぶ、継続例外で失敗 follow-up を送る、継続キー未登録で失敗 follow-up を送る、envelope の token/applicationId から Followup を構築することを検証する
+  - 継続登録の isolate 存在保証: DO を export するモジュールグラフ(`src/index.ts`)を評価した後、top-level 登録した継続キーが `lookupContinuation` で解決できることを workers/DO 実行コンテキスト相当で固定し、lazy/fetch 経路限定登録への退行を防ぐ
+  - 完了状態: 上記レジストリ・runner・isolate 存在保証のユニットテストが workers プロジェクトで通る
+  - _Requirements: 8.3, 8.4, 8.5, 8.6_
+  - _Depends: 7.3, 7.5_
+
+- [ ] 7.7 永続的継続の統合テスト
+  - ハンドラが `mode:"deferred-persistent"` を返すと type5 が即返り、waitUntil で primary cycle agent の seam メソッドが envelope 付きで呼ばれることを検証する
+  - seam の alarm callback が `runScheduledContinuation` へ委譲し、継続成功で本応答 follow-up・継続失敗/キー未登録で失敗 follow-up が送られること、seam が業務ロジックを持たず substrate へ委譲するだけであることを検証する
+  - 完了状態: enqueue→seam→substrate→follow-up の成功/失敗パスを通す統合テストが通る
+  - _Requirements: 8.1, 8.2, 8.4, 8.5, 8.8_
+  - _Depends: 7.4, 7.5_
+
 ## Implementation Notes
 - discord-api-types@0.38.48 では modal action row 子要素の v10 エクスポートは `APIComponentInModalActionRow`(design L287 の `APIModalActionRowComponent` は v8 のみで v10 に存在しない)。modal payload 型を扱う後続タスク(2.2 response, 3.2 dispatch)は v10 名を使うこと。`discord-interactions` は `dependencies`、`discord-api-types` は型のみで `devDependencies`。
 - 新規テストは `vitest.config.ts` の `node`/`workers` プロジェクト `include` 配列へ登録必須。`node` プロジェクトのテストは `tsconfig.test.json` の `include` にも追加が必要(型チェック対象に含めるため)。Workers ランタイム/ExecutionContext/DO を要するテストは `workers` プロジェクト。【更新】現在 `node` プロジェクトは `test/**/*.test.ts` の glob 自動取り込みのため、純ロジックの node テストは `vitest.config.ts` への登録不要(`tsconfig.test.json` への追加のみ必要)。workers ランタイムを要するテストだけ vitest.config の workers include と node exclude へ登録する。
 - task 6.1-6.5(button 契約)は型と各実装への純加算で完了。message 用 `MessageActionRow`(button=type2)と modal 用 `ModalActionRow`(text input=type4)は内包要素で型レベル区別され、`MessageButton`/`MessageActionRow` の Discord payload 互換性は types.ts の compile-time assertion(`APIButtonComponentWithCustomId`/`APIComponentInMessageActionRow`)で担保。button は plain data のため P0 の workerd enum 値問題には抵触しない(新規 discord-api-types の実行時 enum 値追加なし)。deferred 初期応答(type5)には button を載せず follow-up(`editOriginal`/`send` の `MessageOptions.components`)で送る(design L358/L373)。`reply` は `MessageOptions`、`deferred` は ephemeral 限定 `ResponseOptions` のまま分離。
 - infra-foundation の `test/boundary.test.ts` は当初 `src/` 全体から Discord パターン(verifyKey/Ed25519/InteractionType 等)と discord-interactions/discord-api-types 依存を禁止していたが、discord-gateway design と衝突するため基盤自レイヤ限定に再スコープ済み(commit 1313b7e、ユーザー承認)。`src/discord/` と統合点 `src/index.ts` は対象外。よって task 3.2(InteractionType 利用)・4.1(index.ts への interactions 統合)は boundary 検査に抵触しない。
 - **【P0・必読】discord-api-types/v10 の enum「値」(InteractionType.*/InteractionResponseType.*/MessageFlags.*)は本番 workerd ランタイム(@cloudflare/vitest-pool-workers)上で `undefined` に解決され実行時 TypeError を起こす(CJS __exportStar 再エクスポートの interop 問題)。node プロジェクトのテストでは CJS interop で動くため見逃される。応答 type 値・interaction type 判定・ephemeral flag 等の**実行時 enum 値は必ず `discord-interactions`(workerd で正しく解決。verify.ts/index.ts/response.ts/dispatch.ts が使用)から取る**こと(InteractionResponseType.PONG/CHANNEL_MESSAGE_WITH_SOURCE/DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE/MODAL、InteractionType.PING/APPLICATION_COMMAND/MESSAGE_COMPONENT/MODAL_SUBMIT、InteractionResponseFlags.EPHEMERAL=64)。`discord-api-types` は**型のみ**使用(design §Technology Stack と一致)。task 4.1 で response.ts/dispatch.ts を是正済み。**Discord ランタイム挙動を伴うテストは workers プロジェクトで実行すること**(node のみだと workerd 不具合を見逃す)。
+- **task 7.1-7.7(Req 8 永続的継続 substrate)は既存 task 1-6 完了後の追加**。design.md の Req 8 追加に対応する(現行 `~24s` の LLM 推論が `waitUntil` budget 超過で follow-up 不達 → 「考え中…」固着を解消)。継続業務の中身(checkin 分類 / `/status` / `/draft` の `mode:"deferred"`→`mode:"deferred-persistent"` 移行と `registerContinuation` 呼び出し)は**下位機能スペックの adoption** であり本スペック対象外(design L644)。本スペックは substrate(切り離し・token 受け渡し・follow-up 送出・失敗フォールバック)のみ所有(Req 8.8)。週次レビュー生成は既に `fireWeeklyCheckin`(cron scheduled callback)上で DO 実行されるため本 substrate 対象外。
+- **task 7.2/7.4 は infra-foundation 所有ファイルへの変更 = revalidation trigger**。`PRIMARY_CYCLE_KEY` 昇格(`agents/routing.ts`)は goal-management / status-and-draft の import 元差し替えを伴う(規約の意味は不変・追加的)。`EvaluationCycleAgent` seam(`@callable scheduleDeferredContinuation` + alarm callback `runDeferredContinuation`)は `fireWeeklyCheckin` と同型の wiring-root 例外で、ゲートウェイ `continuation.ts` の `runScheduledContinuation` を import する薄い委譲のみ(業務ロジック非実装)。
+- **task 7.3 enqueue と 7.4 seam は module 間相互参照(wiring-root)**。enqueue が agent seam メソッドを呼び、seam callback が substrate runner を呼ぶ。順序は 7.3(substrate)→7.4(seam)とし、7.4 完了で疎通が閉じる。継続登録(`registerContinuation`)は handler registry と同様 `src/index.ts` 起動時 top-level 副作用で行い、`index.ts` が `export { EvaluationCycleAgent }` するため Worker fetch / DO 双方の isolate に反映される。lazy/fetch 経路限定登録は**禁止**(DO isolate で lookup-miss → 失敗 follow-up 誤発火が常態化する。task 7.6 で回帰固定)。
