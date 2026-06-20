@@ -185,7 +185,7 @@
   - _Boundary: Persistent Continuation Substrate_
   - _Depends: 7.1, 7.2, 2.4_
 
-- [ ] 7.4 infra Agent に deferred-continuation seam を追加
+- [x] 7.4 infra Agent に deferred-continuation seam を追加
   - `EvaluationCycleAgent` に `@callable` の登録メソッド(envelope を受け `this.schedule(0, "runDeferredContinuation", envelope)`)と alarm callback `runDeferredContinuation(envelope)` を追加する。callback 本体はゲートウェイ substrate runner(`runScheduledContinuation`)へ委譲する薄い配線で、`fireWeeklyCheckin` と同型・業務ロジックを持たない
   - この変更は infra-foundation への revalidation trigger であり、`this.schedule()` 実行基盤自体は再定義しない
   - 完了状態: enqueue 経由で seam の登録メソッドが envelope 付きで呼ばれ alarm が登録され、alarm 発火時に callback が substrate runner へ委譲する疎通が成立する(seam は業務ロジックを持たない)

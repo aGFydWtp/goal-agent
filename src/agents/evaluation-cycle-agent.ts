@@ -1,5 +1,7 @@
 import { Agent, type AgentContext, callable } from "agents";
+import { runScheduledContinuation } from "../discord/continuation";
 import type { DiscordEnv } from "../discord/env";
+import type { DeferredContinuationEnvelope } from "../discord/types";
 import type { Env } from "../env";
 import { defaultDeps } from "../goal-management/domain/cycle-operations";
 import { getUserCycleAuthority } from "../goal-management/routing";
@@ -110,6 +112,36 @@ export class EvaluationCycleAgent extends Agent<Env> {
       store: createAlertStateStore(this.ctx.storage.sql),
       evidence: this.repository(),
     });
+  }
+
+  // ---- deferred-continuation seam(gateway substrate への最小委譲・task 7.4)----
+  // ゲートウェイの enqueue ヘルパーが、初期応答ライフタイム(waitUntil budget)から切り離した
+  // 永続継続を本 DO 上の alarm として登録するための汎用 seam。`fireWeeklyCheckin` と同型の
+  // 薄い配線で、継続の業務本体(分類・判定・生成)は一切持たない。実体は gateway substrate
+  // (`runScheduledContinuation`)が所有し、本メソッドは登録と委譲のみを行う(Req 8.2, 8.8)。
+
+  /**
+   * deferred-continuation seam の登録入口 (Req 8.2)。
+   *
+   * gateway の継続 enqueue から `@callable` RPC で呼ばれ、envelope を載せた即時ワンショット
+   * alarm(`runDeferredContinuation`)を登録する。`this.schedule(0, ...)` の実行基盤は
+   * infra-foundation の提供物であり、本メソッドは登録のみを行い業務ロジックを持たない。
+   */
+  @callable()
+  async scheduleDeferredContinuation(envelope: DeferredContinuationEnvelope): Promise<void> {
+    await this.schedule(0, "runDeferredContinuation", envelope);
+  }
+
+  /**
+   * deferred-continuation alarm 発火コールバック (Req 8.2, 8.8)。
+   *
+   * `scheduleDeferredContinuation` が登録した alarm の発火時に呼ばれ、gateway substrate runner
+   * (`runScheduledContinuation`)へ env と envelope を渡して委譲するのみ。継続の照合・実行・
+   * follow-up 送出はすべて substrate が所有し、本メソッドは `fireWeeklyCheckin` と同型の薄い
+   * 配線で業務ロジックを持たない。
+   */
+  async runDeferredContinuation(envelope: DeferredContinuationEnvelope): Promise<void> {
+    await runScheduledContinuation(this.env as DiscordEnv, envelope);
   }
 
   // ---- データ権威サーフェス(委譲配線) ---------------------------------
