@@ -6,8 +6,8 @@
 利用者(=下位スペック goal-management / checkin-classification / status-and-draft / notifications の実装者、および Worker を登録・運用する運用者)が観測できる契約として、(a) 署名検証付き interactions エンドポイント、(b) slash command 登録手段、(c) interaction 種別ディスパッチ、(d) deferred + follow-up パターン、(e) プロアクティブ送信ヘルパーを提供する。本ゲートウェイは個別コマンドのビジネスロジック・UX 文言・通知スケジュール・永続化スキーマを所有せず、上流 infra-foundation が確立した Agent トポロジ・共有型・LLM クライアントを消費する。プライバシー要件(仕様書 §15: DM/個人用非公開チャンネル限定)を構造的に強制する。
 
 ## Boundary Context
-- **In scope**: Ed25519 署名検証、PING(type1)→PONG(type1)、slash command 登録手段、interaction 種別(application command / modal submit / message component)のディスパッチ規約、3秒以内の deferred 応答(type5)と follow-up webhook による本応答送信パターン、即時応答および follow-up に message component button を載せる契約、modal を開く応答(type9)、bot token を用いたプロアクティブ送信ヘルパー(DM チャンネル open → メッセージ送信、DM 失敗時のチャンネルフォールバック)、プライバシー前提(DM/個人用非公開チャンネル限定)の構造的強制。
-- **Out of scope**: 個別 slash command(/cycle, /goal, /checkin, /status, /draft, /evidence delete 等)のビジネスロジック・引数定義の内容・UX 文言(各機能スペックが所有)、`this.schedule()` による通知トリガのスケジューリング(notifications が所有。本スペックは送信ヘルパーのみ提供)、永続化スキーマ・Agent トポロジ・LLM クライアント実装(infra-foundation が所有)。
+- **In scope**: Ed25519 署名検証、PING(type1)→PONG(type1)、slash command 登録手段、interaction 種別(application command / modal submit / message component)のディスパッチ規約、3秒以内の deferred 応答(type5)と follow-up webhook による本応答送信パターン、deferred 後の重い継続を初期応答ライフタイムから切り離して実行する永続的継続手段(Agent scheduled 実行への委譲・interaction token/application id の受け渡し・本応答 follow-up 送出・失敗時フォールバック)、即時応答および follow-up に message component button を載せる契約、modal を開く応答(type9)、bot token を用いたプロアクティブ送信ヘルパー(DM チャンネル open → メッセージ送信、DM 失敗時のチャンネルフォールバック)、プライバシー前提(DM/個人用非公開チャンネル限定)の構造的強制。
+- **Out of scope**: 個別 slash command(/cycle, /goal, /checkin, /status, /draft, /evidence delete 等)のビジネスロジック・引数定義の内容・UX 文言(各機能スペックが所有)、`this.schedule()` 実行基盤そのもの・Agent トポロジ・永続化スキーマ・LLM クライアント実装(infra-foundation が所有。本スペックは永続的継続でこれらを消費するのみ)、`this.schedule()` による通知トリガのスケジューリング判定(notifications が所有。本スペックは送信ヘルパーと継続substrateのみ提供)、永続的継続内で実行される各機能の業務ロジック(分類・判定・生成の内容)、pending 状態の保持媒体・スキーマ(各機能スペックが既存の揮発 KV 規約で所有)。
 - **Adjacent expectations**: 本ゲートウェイは infra-foundation が公開する Agent 取得/ルーティングヘルパー・共有型・`Env` バインディングを再定義せず利用する。各機能スペックは本ゲートウェイが定めるディスパッチ規約・deferred/follow-up パターン・送信ヘルパーに従ってコマンド処理を実装し、署名検証や Discord 応答プロトコルを再実装しないことを前提とする。コマンド定義(名前・引数スキーマ)および button の custom_id・表示文言・押下後の業務処理は各機能スペックが供給し、本ゲートウェイは登録手段と登録対象の受け口、および応答に button を含める共通契約のみを提供する。
 
 ## Requirements
@@ -50,7 +50,7 @@
 #### Acceptance Criteria
 1. Where ハンドラが即時に完了できない処理(LLM 呼び出し等)を伴うと宣言する, the ゲートウェイ shall 3秒以内に deferred 応答(type5: DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE)を返す。
 2. When deferred 応答を返した後に重い処理が完了する, the ゲートウェイ shall follow-up webhook を用いて本応答メッセージを送信する。
-3. The ゲートウェイ shall deferred 応答後の重い処理が初期 HTTP 応答の返却後も Worker 上で継続実行されるようにする。
+3. The ゲートウェイ shall deferred 応答後の重い処理が初期 HTTP 応答の返却後も Worker 上で継続実行されるようにする。継続が標準の継続実行budget(初期応答ライフタイムに紐づく実行猶予)を超えうる場合は Requirement 8 の永続的継続手段を用いる。
 4. If deferred 後の処理が失敗する, then the ゲートウェイ shall 利用者へ失敗を伝えるための follow-up 送信手段を提供する。
 5. Where ハンドラが即時に応答できる軽量処理である, the ゲートウェイ shall deferred を経由せず即時応答(type4: CHANNEL_MESSAGE_WITH_SOURCE)を返せる手段を提供する。
 6. Where 応答を本人にのみ表示すべき場合, the ゲートウェイ shall 応答を ephemeral(本人のみ可視)として送信できる手段を提供する。
@@ -87,3 +87,18 @@
 2. The ゲートウェイ shall 週次通知・アラートのスケジューリング判定を実装しない(送信ヘルパーのみを提供する)。
 3. The ゲートウェイ shall 永続化スキーマ・Agent トポロジ・LLM クライアント実装を再定義せず、infra-foundation が公開する契約を利用する。
 4. The ゲートウェイ shall コマンド定義・ハンドラ本体を各機能スペックから受け取る登録規約を提供し、ゲートウェイ自身はコマンドの内容を保持しない。
+
+### Requirement 8: DO-backed 永続的 deferred 継続
+**Objective:** As a 基盤利用者, I want deferred 後の重い継続処理を Worker の初期応答ライフタイムに縛られず実行できる手段, so that LLM 呼び出しのように初期応答後の継続実行budget(`waitUntil`)を超える処理でも本応答 follow-up が確実に届く
+
+> 背景: 現行は deferred 後の継続を初期 HTTP 応答の継続実行(`waitUntil`)で走らせるが、LLM 推論が長い(実測 ~24s)と継続実行budgetを超えてランタイムに打ち切られ、本応答 follow-up が送られず deferred 表示(「考え中…」)が固着する。継続を初期応答ライフタイムから切り離して実行する契約を確立する。
+
+#### Acceptance Criteria
+1. Where ハンドラが deferred 後の継続処理が初期 HTTP 応答後の標準継続実行budgetを超えうると宣言する, the ゲートウェイ shall その継続を初期応答ライフタイムから切り離して実行する永続的継続手段を提供する。
+2. The ゲートウェイ shall 永続的継続を Agent(Durable Object)の scheduled 実行として走らせ、infra-foundation が公開する `this.schedule()` 実行基盤を利用する(本スペックは新たなスケジューラを再定義しない)。
+3. When 永続的継続を起動する, the ゲートウェイ shall その継続が follow-up を送るために必要な interaction token と application id を継続実行コンテキストへ受け渡す。
+4. When 永続的継続内の処理が完了する, the ゲートウェイ shall follow-up webhook(本応答 editOriginal)で本応答を送信し、その送出が interaction token の有効期限(15分)内に行われるようにする。
+5. If 永続的継続の処理が失敗または異常終了する, then the ゲートウェイ shall 利用者へ失敗を伝える follow-up を送信し、deferred 表示(「考え中…」)が無期限に固着しないようにする。
+6. The ゲートウェイ shall LLM 呼び出しを伴う全 deferred フロー(チェックイン分類・週次レビュー生成・ステータス判定・ドラフト生成)が本永続的継続手段を利用できる共通契約として提供する。
+7. The ゲートウェイ shall pending 状態(確認ボタンが参照する分類保持データ等)の保持先を変更せず、各機能スペックが既存の揮発 KV 保持規約をそのまま利用できるようにする。
+8. The ゲートウェイ shall 永続的継続の内部で各機能スペックの業務ロジック(分類・判定・生成の内容)を実装せず、実行substrate(初期応答ライフタイムからの切り離し・token 受け渡し・follow-up 送出・失敗時フォールバック)のみを所有する。

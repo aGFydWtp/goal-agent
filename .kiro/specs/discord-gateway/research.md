@@ -2,8 +2,9 @@
 
 ## Summary
 - **Feature**: `discord-gateway`
-- **Discovery Scope**: Extension(既存 discord-gateway 契約に reply/follow-up の message component button payload を追加)
+- **Discovery Scope**: Extension(既存 discord-gateway 契約に (a) reply/follow-up の message component button payload、(b) DO-backed 永続的 deferred 継続を追加)
 - **Key Findings**:
+  - **(Req 8)** 現行 deferred 継続は初期 HTTP 応答の `ctx.waitUntil()` で走るが、LLM 推論が長い(実測 ~24s)と継続実行 budget を超えてランタイムに打ち切られ、本応答 follow-up が送られず deferred 表示(「考え中…」)が固着する。継続を初期応答ライフタイムから切り離す手段が必要。Cloudflare Agents SDK の `this.schedule(0, callback, payload)` は DO アラームとして即時ワンショット発火し、元リクエストとは独立した実行コンテキストで走るため、これが正攻法の切り離し手段になる。
   - Discord interactions エンドポイントは Ed25519 署名検証(`X-Signature-Ed25519` / `X-Signature-Timestamp` + raw body)と PING(type1)→PONG(type1) を必須とする。検証は raw リクエストボディに対して行う必要があり、JSON パース前に raw body を保持しなければならない。
   - Worker は WebSocket Gateway を常駐できないため interactions(HTTP POST)方式が唯一の正攻法(roadmap で確定済み)。初期応答は 3 秒以内、deferred(type5)後の follow-up は最大 15 分。`ctx.waitUntil()` で初期応答後の処理継続を担保する。
   - Discord の interaction callback data と follow-up webhook body は message `components` をサポートする。button は message 用 Action Row(type1)内の Button(type2)として送信し、custom_id を持つ非 Link/Premium button(style 1-4)のみが後続の message component interaction(type3)として戻る。
@@ -47,6 +48,22 @@
 - **Context**: 本スペックは upstream の Agent トポロジ・共有型・LLM を再定義しない。
 - **Findings**: infra-foundation は `Env`(`AI` / `EvaluationCycleAgent` / `GoalAgent` バインディング)、`getCycleAgent`/`getGoalAgent` ルーティング、`parseAgentName`、共有ドメイン型を公開。Worker エントリーは infra-foundation が `src/index.ts` で確立した `fetch` 委譲点に Discord interactions パスを統合する。
 - **Implications**: ゲートウェイは `Env` を拡張(Discord 用 secrets を追加)し、interaction の実行ユーザー/コマンド名から下位ハンドラへ渡すコンテキストを組み立てるが、Agent 取得自体は各機能ハンドラ側が infra-foundation のルーティングヘルパーで行う。ゲートウェイはハンドラ登録規約とコンテキスト供給に責務を限定する。
+
+### DO-backed 永続的 deferred 継続(Req 8)
+
+- **Context**: deferred 後の LLM 継続を `ctx.waitUntil()` で走らせると、実測 ~24s の推論が継続実行 budget を超えてランタイムに打ち切られ、本応答 follow-up が届かず「考え中…」が固着する(brief の問題そのもの)。継続を初期応答ライフタイムから切り離す必要がある。
+- **Sources Consulted**:
+  - Cloudflare Agents SDK `agents` パッケージ docs(scheduling): `schedule(when, callback, payload?, options?)` — `when: number` は秒遅延のワンショット、`Date` は時刻指定、`string` は cron。payload は JSON シリアライズ可能で callback(Agent メソッド)へ渡る。alarm は元リクエストとは別の DO 実行として発火する。`options.retry` でリトライ可。
+  - 既存実装 `src/discord/dispatch.ts`(現行 `ctx.waitUntil(run(followup))`)、`src/agents/evaluation-cycle-agent.ts`(`fireWeeklyCheckin` = 既に DO scheduled callback として infra Agent 上で notifications 業務へ委譲する先例)、`src/notifications/schedule/weekly-checkin.ts`(`this.schedule()` 利用の先例)。
+- **Findings**:
+  - `this.schedule(0, "callbackName", envelope)` は DO アラームを即時登録し、元リクエスト返却後に独立した DO 実行として callback を発火する。これにより継続は Worker fetch の `waitUntil` budget から切り離される(Req 8.1)。スケジュール登録 RPC 自体は alarm 行の永続化のみで高速に返るため、`ctx.waitUntil(register())` は budget 内に収まる。
+  - callback payload は永続 DO SQLite に保存され、JSON シリアライズ可能なら任意の構造を運べる。interaction token(string)と application id(string)・継続キー・業務 payload を envelope として運べる(Req 8.3)。token は 15 分有効でアラームは数秒内に発火するため失効しない(Req 8.4)。
+  - 既存 `fireWeeklyCheckin` は「infra Agent が scheduled callback を持ち、下位スペックのドメイン関数(`getUserCycleAuthority` で env+userId から authority 再取得 → 業務実行)へ委譲する」配線の先例。継続関数は `this` ではなく env+payload から authority を再取得できるため、現行 `run` クロージャ本体をほぼそのまま「登録された継続関数」へ移せる。
+  - 週次レビュー生成は既に `fireWeeklyCheckin`(cron scheduled callback)上で DO 実行されており waitUntil に縛られない。deferred interaction 由来で waitUntil 打ち切りに晒されるのは checkin 分類(modal submit)・`/status` 判定・`/draft` 生成の 3 経路。
+- **Implications**:
+  - ゲートウェイは「継続レジストリ(キー→業務継続関数)+ 永続継続 substrate runner(envelope から Followup 再構築→継続実行→follow-up 送出→失敗時フォールバック follow-up)」を `src/discord/` に新設し、`HandlerResult` に DO-backed 変種を追加する。
+  - infra-foundation の `EvaluationCycleAgent` に汎用 scheduled-continuation seam(登録メソッド + alarm callback)を 1 つ追加し、callback 本体はゲートウェイ substrate へ委譲する(`fireWeeklyCheckin` 先例と同型)。ゲートウェイは `this.schedule()` を再定義しない(Req 8.2)。
+  - pending KV 保持(確認ボタン参照データ)は継続関数の中で既存規約のまま行われ、ゲートウェイ substrate は保持先に触れない(Req 8.7, 8.8)。
 
 ## Architecture Pattern Evaluation
 
@@ -93,6 +110,18 @@
 - **Trade-offs**: URL button 等の汎用 Discord components は扱わない。現行 requirements は custom_id ディスパッチを前提とするため許容。
 - **Follow-up**: 実装時は `discord-api-types` の `APIActionRowComponent<APIButtonComponent>` と構造互換であることを型テストまたはコンパイル時検証で固定する。
 
+### Decision: 永続的 deferred 継続は DO アラーム(`this.schedule(0,...)`)へ切り離す(Req 8)
+
+- **Context**: LLM 継続を `ctx.waitUntil()` で走らせると budget 超過で打ち切られ follow-up が届かない。
+- **Alternatives Considered**:
+  1. `@callable` で Agent の重い処理を呼び `ctx.waitUntil()` で await — 元リクエストを開いたままにするため同じ budget 問題に晒される(却下)。
+  2. 外部キュー(Cloudflare Queues)へ enqueue — 新インフラ追加。MVP には過剰で、infra の `this.schedule()` で十分(却下)。
+  3. `this.schedule(0, callback, envelope)` でユーザーの primary cycle agent に即時ワンショット alarm を登録し、独立 DO 実行で継続を走らせる(採用)。
+- **Selected Approach**: ハンドラが「budget 超過しうる継続」を宣言した場合、ゲートウェイは即 type5 を返し、`ctx.waitUntil()` 内で primary cycle agent(`getCycleAgent(env, userId, "primary")`)の seam メソッドを呼んで `this.schedule(0, "runDeferredContinuation", envelope)` を登録する。alarm 発火で infra Agent の callback がゲートウェイ substrate(`runScheduledContinuation`)へ委譲し、envelope の interaction token から Followup を再構築 → 継続キーで業務継続を実行 → 本応答 follow-up を送る。失敗時は失敗 follow-up を送り deferred を固着させない。
+- **Rationale**: infra の既存スケジューラを再利用し新インフラを足さない(Req 8.2)。`fireWeeklyCheckin` と同型の「infra Agent が scheduled callback を持ち下位へ委譲」配線で、所有境界(substrate=gateway / business=feature / schedule 基盤=infra)を保てる。
+- **Trade-offs**: infra-foundation の `EvaluationCycleAgent` に汎用 seam メソッド 2 つを追加する(上流変更 = revalidation trigger)。継続業務はクロージャでなくシリアライズ可能な envelope(継続キー + payload)として宣言する必要がある。
+- **Follow-up**: 失敗・継続キー未登録時に必ず失敗 follow-up を送ること、token が alarm 発火まで失効しないことをテストで担保。`options.retry` の採否は実装時に判断(MVP は単発実行 + 失敗 follow-up で開始)。
+
 ### Decision: プライバシー(§15)はコンテキストとヘルパーで構造的に強制
 - **Context**: 個人評価データは DM/個人用非公開チャンネル限定(Req 5, 6)。
 - **Selected Approach**: ハンドラへ渡すコンテキストに実行ユーザー ID を必須で含め、プロアクティブ送信ヘルパーは DM open → 失敗時に「指定された個人用フォールバックチャンネル」へのみフォールバックする。公開チャンネル宛の任意送信 API を公開しない。ephemeral 送信手段を応答ヘルパーに用意。
@@ -101,6 +130,9 @@
 - **Follow-up**: フォールバックチャンネルが個人用非公開である保証は運用設定(env)に依存。ドキュメントで明示。
 
 ## Risks & Mitigations
+- **(Req 8)** alarm 発火遅延で token 失効 — alarm は数秒内発火・token は 15 分有効のため通常逸脱しない。継続失敗(キー未登録・例外・token 失効)は substrate が必ず失敗 follow-up を送り「考え中…」固着を防ぐ(Req 8.5)。
+- **(Req 8)** envelope に interaction token を DO SQLite へ一時保存 — ユーザー自身の DO 内に限定保存され、alarm 発火後は短命。公開面に出ない。
+- **(Req 8)** infra Agent への seam 追加が上流契約を変える — `fireWeeklyCheckin` と同型の薄い委譲メソッドに限定し、business logic を持ち込まない(Req 8.8)。infra-foundation への revalidation trigger として記録。
 - raw body 取得漏れで署名検証が常に失敗 — Worker エントリーで body を一度だけ `text()` 取得し検証→パースの順を固定。ユニットテストで担保。
 - follow-up token 失効(15 分超の処理) — MVP の LLM 処理は数十秒想定で逸脱しない。失効時は送信ヘルパーが失敗を返し呼び出し元が判別。
 - DM 不可ユーザー(403)で通知が届かない — フォールバックチャンネル指定でカバー。未指定時は失敗を返す(Req 5.3)。

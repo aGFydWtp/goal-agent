@@ -6,7 +6,7 @@
 
 **Users**: 直接の利用者は下位スペック(goal-management, checkin-classification, status-and-draft, notifications)の実装者と、Discord アプリ/コマンドを登録・運用する運用者である。本ゲートウェイはエンドユーザー向けのコマンド内容そのものを持たず、コマンドが乗る I/O 規約のみを提供する。
 
-**Impact**: 既存 discord-gateway 契約を拡張する。infra-foundation が確立した Worker エントリー(`src/index.ts`)・`Env`・Agent ルーティングヘルパー・共有型の上に、Discord interactions パス、message component button 付き応答、プロアクティブ送信経路を統合する。永続化スキーマ・Agent トポロジ・LLM クライアントは再定義せず消費する。
+**Impact**: 既存 discord-gateway 契約を拡張する。infra-foundation が確立した Worker エントリー(`src/index.ts`)・`Env`・Agent ルーティングヘルパー・共有型の上に、Discord interactions パス、message component button 付き応答、プロアクティブ送信経路を統合する。加えて、deferred 後の重い継続を初期 HTTP 応答の `waitUntil` budget から切り離す DO-backed 永続的継続 substrate を追加する(現行は ~24s の LLM 推論で budget 超過し follow-up が届かず「考え中…」が固着するため・Req 8)。永続化スキーマ・Agent トポロジ・LLM クライアント・`this.schedule()` 実行基盤は再定義せず消費する。
 
 ### Goals
 - Ed25519 署名検証と PING→PONG を正しく処理し、Discord エンドポイント登録が通る interactions エントリを確立する(Req 1)。
@@ -15,11 +15,13 @@
 - 3秒以内 deferred + follow-up の共通パターン、ephemeral/即時応答手段、message component button 付き応答、modal を開く応答(type9)を提供する(Req 4)。
 - DM open → 送信 → 失敗時フォールバックのプロアクティブ送信ヘルパーを提供する(Req 5)。
 - プライバシー前提(DM/個人用非公開限定)を構造的に強制する(Req 6)。
+- deferred 後の重い継続を初期応答ライフタイム(`waitUntil` budget)から切り離して実行する DO-backed 永続的継続 substrate を、LLM を伴う全 deferred フローの共通契約として提供する(Req 8)。
 
 ### Non-Goals
 - 個別 slash command のビジネスロジック・引数の意味・UX 文言(各機能スペック)。
 - 通知・アラートのスケジューリング判定(notifications。送信ヘルパーのみ本スペック)。
-- 永続化スキーマ・Agent トポロジ・LLM クライアント実装(infra-foundation)。
+- 永続化スキーマ・Agent トポロジ・LLM クライアント実装・`this.schedule()` 実行基盤(infra-foundation。永続的継続はこれを消費するのみで新スケジューラを再定義しない・Req 8.2)。
+- 永続的継続内で実行される各機能の業務ロジック(分類・判定・生成の内容)・pending 状態の保持媒体(各機能スペックが既存規約で所有・Req 8.7, 8.8)。
 - レート制限の高度な制御・複数 bot/複数アプリ対応(MVP スコープ外)。
 
 ## Boundary Commitments
@@ -31,18 +33,23 @@
 - プロアクティブ送信ヘルパー: DM チャンネル open → メッセージ送信 → 403 時の個人用フォールバックチャンネル送信、失敗の判別可能な返却。
 - slash command 登録手段: 各機能が供給するコマンド定義集合を Discord API へ登録するスクリプト/エントリ(グローバル/ギルド単位)。
 - Discord 用 `Env` 拡張: `DISCORD_PUBLIC_KEY` / `DISCORD_APPLICATION_ID` / `DISCORD_BOT_TOKEN`(+ 任意のフォールバックチャンネル設定)の型宣言。
+- **DO-backed 永続的継続 substrate(Req 8)**: deferred 後の継続を初期応答ライフタイムから切り離す実行 substrate。具体的には (a) 継続レジストリ(継続キー → 業務継続関数)、(b) `HandlerResult` の DO-backed deferred 変種、(c) ユーザーの primary cycle agent へ即時ワンショット alarm を登録する enqueue ヘルパー、(d) alarm 上で envelope(interaction token + application id + 継続キー + 業務 payload)から Followup を再構築し継続を実行 → 本応答 follow-up 送出 → 失敗時フォールバック follow-up を行う substrate runner。
 
 ### Out of Boundary
 - 個別コマンドの処理本体・引数スキーマの意味・UX 文言(下位機能スペック)。
 - `this.schedule()` による通知トリガ(notifications)。
-- §11 永続化スキーマ・Agent クラス本体・`LlmClient` 実装(infra-foundation)。
+- §11 永続化スキーマ・Agent クラス本体・`LlmClient` 実装・`this.schedule()` 実行基盤そのもの(infra-foundation。永続的継続は消費するのみ・Req 8.2)。
+- 永続的継続内で実行される各機能の業務ロジック(分類・判定・生成の内容)。ゲートウェイは継続キーで登録された関数を呼ぶ substrate のみを所有し、その中身を実装しない(Req 8.8)。
+- pending 状態(確認ボタンが参照する分類保持データ等)の保持媒体・スキーマ。継続関数の内部で各機能が既存の揮発 KV 規約のまま保持する。substrate は保持先に触れない(Req 8.7)。
 - 各ハンドラ内での Agent 取得ロジック(ハンドラが infra-foundation のルーティングヘルパーを直接利用する。ゲートウェイはコンテキスト供給のみ)。
 
 ### Allowed Dependencies
-- infra-foundation の公開契約: `Env`(拡張して利用)、`getCycleAgent`/`getGoalAgent`/`parseAgentName`、共有ドメイン型。
+- infra-foundation の公開契約: `Env`(拡張して利用)、`getCycleAgent`/`getGoalAgent`/`parseAgentName`、**ユーザー単位データホーム鍵 `PRIMARY_CYCLE_KEY`(infra `agents/routing.ts` 所有)**、共有ドメイン型。
+  - 補足(所有権の昇格): 永続的継続の enqueue は「ユーザーごとに決定的に定まる単一ホーム Agent(`evaluation:{userId}:primary`)」へ着地する必要がある。この `"primary"` 鍵は現状 goal-management(下位スペック)が `PRIMARY_CYCLE_KEY` として所有するが、複数スペック(gateway / goal-management / status-and-draft)が共有するユーザー単位データホーム規約であるため、本スペックは **鍵を infra-foundation の `agents/routing.ts` へ昇格**し、gateway はそこから consume する。gateway はリテラル `"primary"` を再定義せず、下位スペックも import しない(依存方向を上流のみに保つ)。
+- **infra-foundation の `EvaluationCycleAgent` 上の汎用 deferred-continuation seam(Req 8.2)**: enqueue ヘルパーが呼ぶ scheduled-continuation 登録メソッドと、alarm callback。callback 本体はゲートウェイ substrate へ委譲する薄い配線で、`fireWeeklyCheckin`(既存の infra Agent → notifications 委譲)と同型。`this.schedule()` 自体は infra 所有で再定義しない。
 - 外部ライブラリ: `discord-interactions`(`verifyKey` と type 定数)、`discord-api-types`(型のみ)。
-- Cloudflare Workers ランタイム: `fetch` ハンドラ、`ExecutionContext.waitUntil`、Web Crypto。
-- 依存方向: `discord types → env(拡張) → verify → response/rest helpers → registry/dispatch → worker entry 統合`。各層は左方向のみ import する。full `discord.js` は使用しない。
+- Cloudflare Workers / Agents ランタイム: `fetch` ハンドラ、`ExecutionContext.waitUntil`、Web Crypto、Agents SDK の `this.schedule()`(DO alarm)。
+- 依存方向: `discord types → env(拡張) → verify → response/rest helpers → followup/proactive → continuation registry/substrate → registry/dispatch → worker entry 統合`。各層は左方向のみ import する。continuation substrate は infra ルーティング(`getCycleAgent`)を消費するが goal-management 等の下位スペックは import しない。full `discord.js` は使用しない。
 
 ### Revalidation Triggers
 - `InteractionContext` / `InteractionHandler` 登録規約のシグネチャ変更(全下位ハンドラが影響)。
@@ -52,6 +59,9 @@
 - コマンド登録手段が受け取るコマンド定義集合の形の変更。
 - infra-foundation の `Env`・ルーティングヘルパーのシグネチャ変更(上流変更の波及)。
 - message component button の public contract(`MessageActionRow` / `MessageButton` / `MessageOptions`)の形、または button style の許容範囲の変更。
+- **永続的継続契約の変更(Req 8)**: `HandlerResult` の DO-backed deferred 変種の形、継続レジストリの登録シグネチャ(`registerContinuation`)、envelope(continuation envelope)の形 — 変更は全 LLM deferred フロー(checkin 分類 / status 判定 / draft 生成)に波及する。
+- **infra-foundation の `EvaluationCycleAgent` 上の deferred-continuation seam メソッド名・シグネチャの変更**(上流変更の波及。本スペックは enqueue ヘルパーで参照する)。
+- **ユーザー単位データホーム鍵 `PRIMARY_CYCLE_KEY` の所有層・名称の変更**(infra `agents/routing.ts` へ昇格。gateway の enqueue と goal-management / status-and-draft が共有 consume するため、移動・改名は全 consumer に波及する)。
 
 ## Architecture
 
@@ -70,13 +80,19 @@ graph TB
         Resp[Response Utilities]
         Rest[Discord REST Client]
         Proactive[Proactive Send Helper]
+        ContReg[Continuation Registry]
+        Enqueue[Continuation Enqueue Helper]
+        Substrate[Continuation Substrate Runner]
     end
     subgraph Infra
         Routing[infra getCycleAgent getGoalAgent]
+        CycleAgent[EvaluationCycleAgent DO]
+        Seam[deferred continuation seam this.schedule]
         Types[infra Shared Types]
         EnvT[infra Env]
     end
     Handlers[Feature Handlers downstream specs]
+    Continuations[Feature Continuations downstream specs]
     Discord -->|interactions POST| Entry
     Entry --> Verify
     Verify --> Dispatch
@@ -89,13 +105,23 @@ graph TB
     Rest -->|REST| Discord
     Dispatch --> EnvT
     Handlers --> Types
+    Dispatch -->|deferred persistent| Enqueue
+    Enqueue --> Routing
+    Enqueue --> Seam
+    CycleAgent --> Seam
+    Seam -->|alarm callback| Substrate
+    Substrate --> ContReg
+    ContReg --> Continuations
+    Substrate -->|follow-up| Rest
+    Continuations -->|register| ContReg
 ```
 
 **Architecture Integration**:
 - Selected pattern: 薄いエントリー層 + レジストリ。署名検証・種別判定をゲートウェイに集約し、コマンド本体は各機能ハンドラへ委譲することで責務重複を排除。
 - Domain/feature boundaries: ゲートウェイは「検証・ディスパッチ・応答・送信」と、message component button を Discord payload として表現する共通契約を所有する。button の custom_id・表示文言・押下後の業務判断は各機能ハンドラが所有し、ゲートウェイはその内容を保持しない。
-- New components rationale: 全コンポーネントは Discord I/O 規約の共通化に必要。投機的抽象(汎用イベントバス等)は導入しない。
-- Steering compliance: roadmap の「Discord deferred 応答はゲートウェイが提供し各機能が従う」「永続化/Agent/LLM は基盤が所有」に準拠。
+- Persistent continuation boundary(Req 8): ゲートウェイは「継続を初期応答ライフタイムから切り離す substrate(enqueue → DO alarm → Followup 再構築 → 継続実行 → follow-up → 失敗フォールバック)」を所有する。継続の業務内容(分類・判定・生成)は継続キーで登録された各機能の関数が所有し、substrate はその中身を実装しない。`this.schedule()` 実行基盤は infra 所有で、`EvaluationCycleAgent` 上の薄い seam メソッド(`fireWeeklyCheckin` と同型の委譲配線)経由で利用する。
+- New components rationale: 全コンポーネントは Discord I/O 規約の共通化、および LLM 継続を budget から切り離す共通化に必要。投機的抽象(汎用イベントバス・外部キュー等)は導入しない。
+- Steering compliance: roadmap の「Discord deferred 応答はゲートウェイが提供し各機能が従う」「永続化/Agent/LLM/`this.schedule()` は基盤が所有」に準拠。継続の所有者スコープは structure.md の「Agent 名に userId」に従い、ユーザー自身の primary cycle agent 上で実行する。
 
 ### Technology Stack
 
@@ -105,7 +131,8 @@ graph TB
 | Auth / Verify | `discord-interactions`(`verifyKey`) | Ed25519 署名検証・type 定数 | Workers/Web Crypto 互換。自前実装は不採用 |
 | Types | `discord-api-types` | interaction payload / REST body の型 | ランタイムコストゼロ(型のみ) |
 | Messaging | `fetch` ベース薄い Discord REST クライアント | follow-up webhook・message components・プロアクティブ送信 | `@discordjs/rest`・full `discord.js` は不使用 |
-| Runtime | `ExecutionContext.waitUntil` | deferred 後処理の継続 | 3秒応答後の重い処理を吸収 |
+| Runtime | `ExecutionContext.waitUntil` | budget 内で収まる軽量 deferred 継続 + 永続的継続の enqueue | 3秒応答後の短い処理 / alarm 登録 RPC を吸収 |
+| Scheduling | Agents SDK `this.schedule(0, cb, payload)`(DO alarm) | budget 超過しうる LLM 継続を初期応答ライフタイムから切り離して実行(Req 8) | infra `this.schedule()` を消費。新スケジューラは作らない |
 
 ## File Structure Plan
 
@@ -121,8 +148,9 @@ src/
     ├── rest.ts                      # fetch ベース Discord REST クライアント: webhook 編集/送信(components 対応)・DM open・channel 送信(Req 4.2, 4.9, 5.1, 5.4)
     ├── followup.ts                  # follow-up 送信ユーティリティ(@original PATCH / 追加 POST、components 対応、失敗判別)(Req 4.2, 4.4, 4.9)
     ├── proactive.ts                 # プロアクティブ送信ヘルパー: DM open→送信→403 フォールバック→失敗返却(Req 5.1-5.5, 6.3, 6.4)
+    ├── continuation.ts              # (New) 永続的継続 substrate: 継続レジストリ(register/lookup)・envelope 型・enqueue ヘルパー(primary cycle agent へ schedule(0,...))・substrate runner(envelope→Followup 再構築→継続実行→follow-up→失敗フォールバック)(Req 8.1, 8.3-8.6, 8.8)
     ├── registry.ts                  # コマンド名/custom_id をキーにしたハンドラレジストリと登録規約(Req 3.1-3.4, 3.6, 7.4)
-    ├── dispatch.ts                  # 検証済み interaction の種別判定→レジストリ照合→ハンドラ実行→reply/deferred/modal/button 配線(Req 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10)
+    ├── dispatch.ts                  # (Modified) 種別判定→照合→実行→reply/deferred/modal/button 配線 + DO-backed deferred 変種の enqueue 配線(Req 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10, 8.1)
     └── commands/
         ├── definitions.ts           # 各機能が自分のコマンド定義を追加する単一集約点(空の集約配列)(Req 2.1, 2.5, 7.4)
         └── register.ts              # コマンド登録スクリプト: 認証情報検証→Discord API 登録(グローバル/ギルド)(Req 2.2-2.4)
@@ -130,8 +158,12 @@ src/
 
 ### Modified Files
 - `src/index.ts` — infra-foundation が確立した `fetch` 委譲点に Discord interactions パス(例: `POST /interactions`)を追加し、検証→ディスパッチへ委譲する。既存の Agent 配線・ルーティングは変更しない。
+- `src/discord/types.ts` — `HandlerResult` に DO-backed deferred 変種(`mode: "deferred-persistent"`)を追加し、継続キー + シリアライズ可能 payload を宣言できるようにする(Req 8.1)。継続関数型 `Continuation` と envelope 型 `DeferredContinuationEnvelope` を公開する。
+- `src/discord/dispatch.ts` — `deferred-persistent` 変種を受けた際に type5 を即返し、`ctx.waitUntil` 内で `continuation.ts` の enqueue ヘルパー(primary cycle agent への alarm 登録)を呼ぶ。enqueue 自体が失敗した場合は失敗 follow-up へフォールバックする(Req 8.1, 8.5)。
+- `src/agents/evaluation-cycle-agent.ts`(**infra-foundation 所有 / 本スペックが要求する seam 追加**)— 汎用 deferred-continuation seam を 2 メソッド追加する: `@callable` の登録メソッド(envelope を受け `this.schedule(0, "runDeferredContinuation", envelope)`)と、alarm callback `runDeferredContinuation(envelope)`(本体はゲートウェイ substrate runner へ委譲)。`fireWeeklyCheckin` と同型の薄い委譲で、業務ロジックを持たない(Req 8.2, 8.8)。この変更は infra-foundation への revalidation trigger。
+- `src/agents/routing.ts`(**infra-foundation 所有 / 本スペックが要求する昇格**)— ユーザー単位データホーム鍵 `PRIMARY_CYCLE_KEY`(`"primary"`)を本層へ昇格・export する。現状 goal-management `routing.ts` が所有するが、gateway の継続 enqueue が上流からこの鍵を必要とするため、所有者を infra へ移す。goal-management / status-and-draft は import 元を本層へ差し替える(規約の意味は不変・追加的変更)。この昇格は infra-foundation への revalidation trigger。
 
-> 依存方向: `discord/env`・`discord/types` → `discord/verify` → `discord/response`・`discord/rest` → `discord/followup`・`discord/proactive` → `discord/registry` → `discord/dispatch` → `src/index.ts`。`commands/` は登録専用で `env`/`types` のみ参照。各層は左方向のみ import する。
+> 依存方向: `discord/env`・`discord/types` → `discord/verify` → `discord/response`・`discord/rest` → `discord/followup`・`discord/proactive` → `discord/continuation`(infra `getCycleAgent` を消費) → `discord/registry` → `discord/dispatch` → `src/index.ts`。`commands/` は登録専用で `env`/`types` のみ参照。`evaluation-cycle-agent.ts`(infra)の seam callback はゲートウェイ `continuation.ts` の substrate runner を import する(`fireWeeklyCheckin` が notifications を import するのと同型の wiring-root 例外)。各層はそれ以外で左方向のみ import する。
 
 ## System Flows
 
@@ -176,7 +208,44 @@ sequenceDiagram
         end
     end
 ```
-deferred 宣言の有無で初期応答(type5 vs type4)が分岐する。deferred の初期応答(type5)には loading/ephemeral 以外の message body を載せず、button は `editOriginal` または追加 follow-up の message payload として送る。即時応答(type4)では `data.components` に action row/button を含められる。
+deferred 宣言の有無で初期応答(type5 vs type4)が分岐する。deferred の初期応答(type5)には loading/ephemeral 以外の message body を載せず、button は `editOriginal` または追加 follow-up の message payload として送る。即時応答(type4)では `data.components` に action row/button を含められる。deferred には 2 系統あり、budget 内で収まる軽量継続は `mode:"deferred"`(`waitUntil` で `run` を継続)、budget 超過しうる LLM 継続は `mode:"deferred-persistent"`(次フロー)を宣言する。
+
+### DO-backed 永続的 deferred 継続フロー(Req 8)
+```mermaid
+sequenceDiagram
+    participant D as Discord
+    participant DP as Dispatcher
+    participant EQ as Enqueue Helper
+    participant CA as Cycle Agent DO
+    participant SB as Substrate Runner
+    participant CR as Continuation Registry
+    participant F as Followup
+    DP-->>D: 200 deferred type5 (3秒以内)
+    DP->>EQ: ctx.waitUntil(enqueue(userId, envelope))
+    EQ->>CA: scheduleDeferredContinuation(envelope)
+    CA->>CA: this.schedule(0, runDeferredContinuation, envelope)
+    Note over CA: alarm 登録 RPC は即返却(budget 内)
+    CA-->>CA: alarm 発火(独立 DO 実行)
+    CA->>SB: runScheduledContinuation(env, envelope)
+    SB->>F: createFollowup(env, token)
+    SB->>CR: lookup(continuationKey)
+    alt 継続あり
+        CR-->>SB: continuation fn
+        SB->>SB: continuation(env, payload, followup) 実行(LLM 等)
+        alt 成功
+            SB->>F: editOriginal(本応答, components?)
+            F-->>D: REST 送信(本応答)
+        else 例外
+            SB->>F: editOriginal(失敗通知)
+            F-->>D: REST 送信(失敗・固着防止)
+        end
+    else 継続キー未登録
+        CR-->>SB: none
+        SB->>F: editOriginal(失敗通知)
+        F-->>D: REST 送信(失敗・固着防止)
+    end
+```
+継続は元 HTTP 応答の `waitUntil` budget から切り離され、DO alarm の独立実行で走る(Req 8.1)。envelope は interaction token と application id を継続実行コンテキストへ運ぶ(Req 8.3)。alarm は数秒内発火し token 15 分窓内に follow-up を送る(Req 8.4)。継続キー未登録・例外・失効は必ず失敗 follow-up を送り「考え中…」固着を防ぐ(Req 8.5)。継続関数内の pending KV 保持は各機能が既存規約のまま行い substrate は触れない(Req 8.7)。
 
 ### message component button 応答フロー(reply / follow-up → component interaction)
 ```mermaid
@@ -231,7 +300,7 @@ sequenceDiagram
 | 3.4 | 未登録の判別可能エラー | dispatch.ts | `dispatchInteraction` | 受信フロー |
 | 3.5 | ハンドラへ文脈供給 | types.ts, dispatch.ts | `InteractionContext` | 受信フロー |
 | 3.6, 7.4 | ハンドラ登録規約 | registry.ts, types.ts | `registerHandler`, `InteractionHandler` | — |
-| 4.1, 4.3 | 3秒以内 deferred・waitUntil 継続 | response.ts, dispatch.ts | `deferred`, `dispatchInteraction` | 受信フロー |
+| 4.1, 4.3 | 3秒以内 deferred・budget 内は waitUntil 継続/超過は Req 8 へ委譲 | response.ts, dispatch.ts | `deferred`, `dispatchInteraction` | 受信フロー |
 | 4.2, 4.4 | follow-up 本応答/失敗送信 | followup.ts, rest.ts | `sendFollowup`, `editOriginal` | 受信フロー |
 | 4.5 | 即時応答手段 | response.ts | `reply` | 受信フロー |
 | 4.6, 6.2 | ephemeral 応答 | response.ts | `reply`/`deferred` (ephemeral flag) | 受信フロー |
@@ -246,6 +315,14 @@ sequenceDiagram
 | 5.5, 6.3, 6.4 | DM/非公開限定・公開送信拒否 | proactive.ts | `sendDirectMessage` | 送信フロー |
 | 6.1 | 実行ユーザー ID の一貫供給 | types.ts, dispatch.ts | `InteractionContext` | 受信フロー |
 | 7.1, 7.2, 7.3 | 境界維持(中身/通知判定/上流を持たない) | (Boundary Commitments) | — | — |
+| 8.1 | budget 超過しうる継続を切り離す手段 | dispatch.ts, continuation.ts, types.ts | `HandlerResult({mode:"deferred-persistent"})`, `enqueueDeferredContinuation` | 永続的継続フロー |
+| 8.2 | Agent scheduled 実行・infra `this.schedule()` 利用 | continuation.ts, evaluation-cycle-agent.ts (infra seam) | `scheduleDeferredContinuation`, `this.schedule` | 永続的継続フロー |
+| 8.3 | token + application id を継続コンテキストへ受け渡し | continuation.ts | `DeferredContinuationEnvelope` | 永続的継続フロー |
+| 8.4 | 完了時 follow-up を 15 分窓内に送出 | continuation.ts, followup.ts | `runScheduledContinuation`, `Followup.editOriginal` | 永続的継続フロー |
+| 8.5 | 失敗時 follow-up で固着防止 | continuation.ts | `runScheduledContinuation` | 永続的継続フロー |
+| 8.6 | LLM 全 deferred フローの共通契約 | continuation.ts, types.ts | `registerContinuation`, `HandlerResult({mode:"deferred-persistent"})` | 永続的継続フロー |
+| 8.7 | pending 保持先を変更しない | (Boundary Commitments / continuation.ts non-ownership) | — | — |
+| 8.8 | substrate のみ所有・業務ロジック非実装 | continuation.ts, evaluation-cycle-agent.ts (infra seam) | `registerContinuation`, `runDeferredContinuation` | 永続的継続フロー |
 
 ## Components and Interfaces
 
@@ -259,7 +336,9 @@ sequenceDiagram
 | Followup Utility | followup | follow-up 本応答/失敗送信/button 付き送信 | 4.2, 4.4, 4.9 | rest (P0), env (P0) | Service |
 | Proactive Send Helper | proactive | DM→フォールバック送信 | 5.1-5.5, 6.3, 6.4 | rest (P0), env (P0) | Service |
 | Handler Registry | registry | 識別子→ハンドラ対応付け | 3.1-3.4, 3.6, 4.10, 7.4 | types (P0) | Service, State |
-| Interaction Dispatcher | dispatch | 種別判定→照合→実行→reply/deferred/modal/button 配線 | 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10 | registry (P0), response (P0), types (P0) | Service |
+| Interaction Dispatcher | dispatch | 種別判定→照合→実行→reply/deferred/modal/button + 永続継続 enqueue 配線 | 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10, 8.1 | registry (P0), response (P0), continuation (P0), types (P0) | Service |
+| Persistent Continuation Substrate | continuation | 継続レジストリ + enqueue(schedule 登録) + alarm 上の Followup 再構築→継続実行→follow-up→失敗フォールバック | 8.1, 8.3-8.6, 8.8 | infra getCycleAgent (P0), followup (P0), types (P0) | Service, State |
+| Deferred Continuation Seam (infra) | agents | `EvaluationCycleAgent` の薄い登録/alarm callback。substrate へ委譲 | 8.2, 8.8 | continuation (P0), agents this.schedule (P0) | Service |
 | Command Definitions | commands | コマンド定義の単一集約点 | 2.1, 2.5, 7.4 | types (P1) | State |
 | Command Register | commands | 登録スクリプト | 2.2, 2.3, 2.4 | env (P0), definitions (P0) | Service, Batch |
 | Worker Entry 統合 | worker | interactions パス統合 | 1.4, 1.6 | verify (P0), dispatch (P0), infra index (P0) | API |
@@ -275,7 +354,7 @@ sequenceDiagram
 
 **Responsibilities & Constraints**
 - 実行ユーザー ID・コマンド名・引数・custom_id・チャンネル/DM 文脈を含む `InteractionContext` を定義(Req 3.5, 6.1)。
-- ハンドラは「即時応答型(reply)」「deferred 型」「modal を開く型(modal)」のいずれかを宣言できる(Req 4.1, 4.7)。
+- ハンドラは「即時応答型(reply)」「deferred 型(waitUntil)」「DO-backed 永続継続型(deferred-persistent)」「modal を開く型(modal)」のいずれかを宣言できる(Req 4.1, 4.7, 8.1)。`deferred-persistent` はクロージャでなく継続キー + シリアライズ可能 payload を宣言し、業務本体は継続レジストリに登録された `Continuation` が担う(Req 8.6, 8.8)。
 - `reply` と `Followup` は同じ `MessageOptions` を用い、ephemeral と message component button を同じ契約で表現する(Req 4.6, 4.8, 4.9)。
 - `MessageButton` は押下後に interaction を返す非 Link/Premium button(style 1-4)のみを扱う。URL button / premium button は custom_id ディスパッチに戻らないため本契約に含めない(Req 4.10, 4.11)。
 - ゲートウェイはコマンドの中身を持たず、ハンドラは外部供給物として型で受ける(Req 7.4)。
@@ -326,10 +405,35 @@ interface Followup {
   send(content: string, opts?: MessageOptions): Promise<SendResult>;
 }
 
+// JSON シリアライズ可能な継続 payload(DO alarm 経由で運ぶため。any は使わない)。
+type JsonValue =
+  | string | number | boolean | null
+  | { readonly [key: string]: JsonValue }
+  | readonly JsonValue[];
+type ContinuationPayload = { readonly [key: string]: JsonValue };
+
 type HandlerResult =
   | { mode: "reply"; ephemeral?: boolean; content: string; components?: MessageActionRow[] } // 即時(type4)
-  | { mode: "deferred"; ephemeral?: boolean; run: (followup: Followup) => Promise<void> }
-  | { mode: "modal"; customId: string; title: string; components: ModalActionRow[] }; // modal を開く(type9)
+  | { mode: "deferred"; ephemeral?: boolean; run: (followup: Followup) => Promise<void> }    // budget 内継続(waitUntil)
+  | { mode: "deferred-persistent"; ephemeral?: boolean;                                       // budget 超過しうる継続(DO alarm / Req 8.1)
+      continuation: { key: string; payload: ContinuationPayload } }
+  | { mode: "modal"; customId: string; title: string; components: ModalActionRow[] };         // modal を開く(type9)
+
+// 継続レジストリに登録する業務継続関数(Req 8.6, 8.8)。`this` ではなく env + payload から
+// authority を再取得して走り、Followup で本応答を送る。中身は各機能スペックが所有する。
+type Continuation = (
+  env: DiscordEnv,
+  payload: ContinuationPayload,
+  followup: Followup,
+) => Promise<void>;
+
+// DO alarm へ運ぶ封筒(JSON シリアライズ可能 / Req 8.3)。
+interface DeferredContinuationEnvelope {
+  readonly interactionToken: string;   // follow-up 用 token(Req 8.3, 8.4)
+  readonly applicationId: string;      // follow-up webhook URL 構築用(Req 8.3)
+  readonly continuationKey: string;    // 継続レジストリのキー(Req 8.6)
+  readonly payload: ContinuationPayload; // 業務入力(再生成不能な確定前データを含みうる)
+}
 
 // Discord modal payload に準拠(discord-api-types: APIActionRowComponent<APIModalActionRowComponent>)。
 // action row が text input(TEXT_INPUT, type4 component)を内包する。
@@ -465,18 +569,19 @@ declare function lookupHandler(
 
 | Field | Detail |
 |-------|--------|
-| Intent | 検証済み interaction を種別判定し、照合・実行・reply/deferred/modal/button 配線 |
-| Requirements | 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10 |
+| Intent | 検証済み interaction を種別判定し、照合・実行・reply/deferred/deferred-persistent/modal/button 配線 |
+| Requirements | 1.6, 3.1-3.5, 4.1-4.3, 4.7-4.10, 8.1 |
 
 **Responsibilities & Constraints**
 - type2/3/5 を `command`/`component`/`modal` に判定し `InteractionContext` を構築(Req 3.1-3.3, 3.5, 6.1)。
 - レジストリ未ヒット時は判別可能なエラー応答(Req 3.4)。
 - `deferred` ハンドラは type5 を即返し、`ctx.waitUntil(run(followup))` で継続(Req 4.1, 4.3)。`reply` は type4 を返し、`components` があれば `response.reply` へ渡す(Req 4.5, 4.8)。`modal` ハンドラは Discord interaction response type9(MODAL)を初期応答として返す(`customId`/`title`/`components` を modal payload に整形)(Req 4.7)。
+- `deferred-persistent` ハンドラは type5 を即返し、`ctx.waitUntil(enqueueDeferredContinuation(env, ctx.userId, envelope))` で primary cycle agent へ継続を登録する。envelope は `ctx.token`・`env.DISCORD_APPLICATION_ID`・継続キー・payload から組み立てる。enqueue 自体の失敗は失敗 follow-up へフォールバック(Req 8.1, 8.5)。
 - message component interaction(type3)は `data.custom_id` を `InteractionContext.name` として扱い、button 押下後も既存の custom_id ディスパッチ規約を使う(Req 4.10)。
 
 **Dependencies**
 - Inbound: Worker Entry(P0)
-- Outbound: Registry(P0)、Response Utilities(P0)、Followup(P0)
+- Outbound: Registry(P0)、Response Utilities(P0)、Followup(P0)、Continuation Substrate(P0 / `enqueueDeferredContinuation`)
 - External: `ExecutionContext.waitUntil`(P0)
 
 **Contracts**: Service [x]
@@ -490,8 +595,56 @@ declare function dispatchInteraction(
 ): Promise<Response>;
 ```
 - Preconditions: `interaction` は署名検証済み・非 PING。
-- Postconditions: deferred 経路は初期応答後 follow-up を送る処理を `waitUntil` に登録。
-- Invariants: 初期応答は 3 秒以内に返る(重い処理は waitUntil 側)。
+- Postconditions: `deferred` 経路は follow-up 処理を `waitUntil` に登録。`deferred-persistent` 経路は DO alarm の登録(enqueue)を `waitUntil` に登録し、本処理は alarm 側へ切り離す(Req 8.1)。
+- Invariants: 初期応答は 3 秒以内に返る(重い処理は waitUntil / DO alarm 側)。
+
+#### Persistent Continuation Substrate
+
+| Field | Detail |
+|-------|--------|
+| Intent | 継続を初期応答ライフタイムから切り離して実行する substrate(Req 8) |
+| Requirements | 8.1, 8.3-8.6, 8.8 |
+
+**Responsibilities & Constraints**
+- 継続レジストリ: 継続キー → `Continuation` を登録/照合する。各機能スペックが自分の業務継続を登録し、ゲートウェイは中身を実装しない(Req 8.6, 8.8)。
+- enqueue ヘルパー: `getCycleAgent(env, userId, PRIMARY_CYCLE_KEY)`(`PRIMARY_CYCLE_KEY` は infra `agents/routing.ts` から import。リテラル `"primary"` を gateway 内で再定義しない)でユーザー自身のホーム Agent(= `evaluation:{userId}:primary`)を取得し、その seam メソッドを呼んで `DeferredContinuationEnvelope` を `this.schedule(0, ...)` へ登録する(Req 8.1, 8.2)。所有者スコープは Agent 名の userId で構造的に閉じる。なおゲートウェイがこのホーム Agent を選ぶのは「ユーザーごとに決定的な単一 DO」であれば十分なためで、data-authority であること自体には依存しない(継続関数が内部で `getUserCycleAuthority` 等により権威を再取得する)。
+- substrate runner: alarm 実行時に envelope の `interactionToken`/`applicationId` から `Followup` を再構築(Req 8.3, 8.4)→ 継続キーで `Continuation` を照合・実行 → 成功で本応答 follow-up を送出。継続キー未登録・継続例外・token 失効はいずれも失敗 follow-up を送り deferred 固着を防ぐ(Req 8.5)。
+- pending KV 保持には触れない。継続関数の内部で各機能が既存規約のまま保持する(Req 8.7)。
+
+**Dependencies**
+- Inbound: Interaction Dispatcher — `enqueueDeferredContinuation`(P0)。Deferred Continuation Seam(infra)— `runScheduledContinuation`(P0)。
+- Outbound: Followup — `createFollowup`(P0)。
+- External: infra `getCycleAgent`(P0)、`EvaluationCycleAgent` の seam メソッド(P0)。
+
+**Contracts**: Service [x] / State [x](継続レジストリは module スコープの登録状態)
+
+##### Service Interface
+```typescript
+declare function registerContinuation(key: string, fn: Continuation): void;
+declare function lookupContinuation(key: string): Continuation | null;
+
+// dispatch が deferred-persistent 受信時に呼ぶ。primary cycle agent へ alarm を登録する。
+declare function enqueueDeferredContinuation(
+  env: DiscordEnv,
+  userId: string,
+  envelope: DeferredContinuationEnvelope,
+): Promise<void>;
+
+// infra Agent の alarm callback が委譲する substrate 本体。
+declare function runScheduledContinuation(
+  env: DiscordEnv,
+  envelope: DeferredContinuationEnvelope,
+): Promise<void>;
+```
+- Preconditions: `enqueueDeferredContinuation` は署名検証済み interaction の文脈から呼ばれ、`userId` は実行ユーザー。`runScheduledContinuation` は DO alarm 実行内で呼ばれる。
+- Postconditions: 継続成功時のみ本応答 follow-up が送られる。失敗時は失敗 follow-up が送られ「考え中…」が固着しない(Req 8.5)。
+- Invariants: 継続業務は継続レジストリ登録関数が所有し、substrate は中身を実装しない(Req 8.8)。継続実行はユーザー自身の Agent 上で行われ、他ユーザー文脈へ越境しない。
+
+**Implementation Notes**
+- Integration: 既存の LLM deferred ハンドラ(checkin 分類 modal submit / `/status` / `/draft`)は `mode:"deferred"` から `mode:"deferred-persistent"` へ移行し、現行 `run` 本体を継続キー付きの `Continuation` として登録する(下位機能スペックの adoption)。週次レビュー生成は既に `fireWeeklyCheckin`(cron scheduled callback)上で DO 実行されるため本 substrate の対象外で、Req 8.6 の共通契約は 3 経路 + 将来の LLM deferred フローに適用される。
+- Registration(DO isolate 上での存在保証 / 重要): substrate runner は `EvaluationCycleAgent` の alarm(DO isolate)上で `lookupContinuation(key)` を引くため、継続登録(`registerContinuation`)は **DO を export するモジュールグラフから到達可能な起動時副作用** でなければならない。本プロジェクトの既存 handler registry は `src/index.ts` 冒頭の `registerGoalManagement()` 等の top-level 副作用で登録され、同 `index.ts` が `export { EvaluationCycleAgent }` するため Worker fetch isolate と DO isolate の双方で登録が反映される。継続登録もこの同一機構に従い、`index.ts` 起動時の各機能 `registerXxx()`(adoption 側)で `registerContinuation` を呼ぶ。lazy/fetch 経路限定の登録は **禁止**(DO isolate で lookup-miss → Req 8.5 の失敗 follow-up が毎回誤発火し「考え中…失敗」が常態化するため)。テストは DO 実行コンテキスト相当で lookup 成功を確認する(下記 Testing 参照)。
+- Validation: envelope は JSON シリアライズ可能な型に限定(`ContinuationPayload`)。token は alarm 数秒内発火で 15 分窓内に収まる。
+- Risks: `options.retry` の採否は実装時判断(MVP は単発 + 失敗 follow-up)。enqueue RPC 失敗時は dispatch 側で失敗 follow-up にフォールバック。
 
 ### messaging
 
@@ -582,7 +735,7 @@ declare function sendDirectMessage(
 
 ## Data Models
 
-本スペックは永続化スキーマを所有しない(infra-foundation 所有)。扱うのは Discord interaction の入出力契約(`InteractionContext` / `HandlerResult` / `MessageOptions` / `MessageActionRow` / `MessageButton` / `SendResult`)のみで、これらは Components の Service Interface に定義済み。永続化される新規エンティティはない。
+本スペックは永続化スキーマを所有しない(infra-foundation 所有)。扱うのは Discord interaction の入出力契約(`InteractionContext` / `HandlerResult` / `MessageOptions` / `MessageActionRow` / `MessageButton` / `SendResult` / `DeferredContinuationEnvelope` / `Continuation`)のみで、これらは Components の Service Interface に定義済み。永続的継続の DO alarm 行は infra の `this.schedule()` が管理する SQLite に短命保存され、本スペックは独自テーブルを定義しない。継続レジストリは module スコープの登録状態(永続化なし)。pending 状態の保持先も各機能スペック所有で変更しない(Req 8.7)。
 
 ## Error Handling
 
@@ -591,6 +744,8 @@ declare function sendDirectMessage(
 - ディスパッチ: 未登録ハンドラは判別可能なエラー応答(Req 3.4)。例外は ephemeral エラー応答に正規化し、個人データを露出しない。
 - 送信: REST 失敗は `SendResult`(`forbidden`/`not_found`/`rest_error`)として返し、例外を投げない(Req 4.4, 5.3)。
 - deferred 後処理失敗: `run` 内で `followup.send`/`editOriginal` を用いて利用者へ失敗を伝える手段を提供(Req 4.4)。
+- 永続的継続失敗(Req 8.5): substrate runner は継続キー未登録・継続例外・token 失効のいずれでも失敗 follow-up(`editOriginal`)を送り、deferred 表示(「考え中…」)を固着させない。dispatch 側の enqueue RPC 失敗も同様に失敗 follow-up へフォールバックする。
+- 固着防止の保証境界(Req 8.5 の残存経路): 上記は (a) enqueue 前/中の失敗、(b) substrate runner 内の失敗 を follow-up でカバーする。残る経路は「enqueue 成功(alarm 登録済)だが alarm が substrate runner へ到達/完了しない」もの。これは DO alarm の **自動リトライ**(alarm callback が throw すると指数バックオフで再実行される)を一次緩和とし、再実行時に substrate runner が走れば失敗 follow-up までは到達する。総 alarm 喪失(プラットフォーム起因で alarm 行自体が消失する稀ケース)は本スペックでは **残存リスク**として受容し、`console` ログのみ(別途 watchdog は MVP 対象外)。token 15 分窓内にリトライが収束しなかった場合は固着しうる点を保証境界として明記する。
 
 ### Error Categories and Responses
 - User/Protocol Errors: 署名不正→401。未登録 interaction→判別可能エラー応答。
@@ -609,6 +764,9 @@ declare function sendDirectMessage(
 - `followup`: `editOriginal` / `send` が `MessageOptions.components` を webhook body に含めること、deferred 初期応答では components を送らないこと(4.1, 4.2, 4.9)。
 - `sendDirectMessage`: DM 成功で `ok`、403+fallback でフォールバック送信、403+fallback 無しで `forbidden`(5.1, 5.2, 5.3)。
 - `register`: 認証情報欠落時に登録せずエラー(2.3)。
+- `continuation` レジストリ: `registerContinuation`/`lookupContinuation` の登録/照合往復、未登録キーで `null`(8.6)。
+- 継続登録の isolate 存在保証: `src/index.ts` を import(= DO を export するモジュールグラフを評価)した後、adoption 対象キー(checkin 分類 / `/status` / `/draft`)が `lookupContinuation` で解決できること。lazy 経路に頼らず top-level 登録で DO isolate にも反映される回帰を固定する(8.5, 8.6)。
+- `runScheduledContinuation`: 継続成功で `editOriginal`(本応答)が呼ばれる、継続例外で失敗 follow-up が送られる、継続キー未登録で失敗 follow-up が送られる(8.4, 8.5)。envelope の token/applicationId から Followup が構築されること(8.3)。
 
 ### Integration Tests
 - 検証→ディスパッチ: 署名済み command interaction が対応ハンドラへ振り分けられ type4 が返る(1.6, 3.1, 3.5)。
@@ -618,6 +776,8 @@ declare function sendDirectMessage(
 - button 付き follow-up: deferred handler が `followup.editOriginal` / `send` に `components` を渡すと webhook body に action row/button が含まれる(4.9)。
 - modal を開く経路: command/component ハンドラが `mode:"modal"` を返すと type9(MODAL)応答が返り、payload に customId/title/text input が含まれる(4.7)。
 - 未登録 interaction: 判別可能なエラー応答が返る(3.4)。
+- 永続的継続 enqueue: ハンドラが `mode:"deferred-persistent"` を返すと type5 が即返り、`waitUntil` で primary cycle agent の seam メソッドが envelope 付きで呼ばれる(8.1, 8.2, 8.3)。
+- 永続的継続実行: seam の alarm callback が `runScheduledContinuation` へ委譲し、継続成功で本応答 follow-up、継続失敗/キー未登録で失敗 follow-up が送られる(8.4, 8.5)。infra Agent の seam メソッドが業務ロジックを持たず substrate へ委譲するだけであること(8.8)。
 
 ### E2E / Smoke Tests
 - PING リクエストに対し Worker が PONG を返し、Discord エンドポイント登録の検証が通ること(1.4)。
