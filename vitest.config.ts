@@ -30,6 +30,7 @@ export default defineConfig({
             "test/notifications-agent-wiring.test.ts",
             "test/discord-continuation-seam.test.ts",
             "test/discord-continuation-isolate.test.ts",
+            "test/discord-continuation-e2e.test.ts",
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",
@@ -64,6 +65,8 @@ export default defineConfig({
             "test/discord-continuation-seam.test.ts",
             // 継続レジストリ/runner/isolate 存在保証(task 7.6, Req 8.3-8.6)。src/index(DO export)評価後の top-level 継続登録が workerd 上で lookup 解決できることを固定する。
             "test/discord-continuation-isolate.test.ts",
+            // 永続的継続 End-to-End(task 7.7, Req 8.1, 8.2, 8.4, 8.5, 8.8)。dispatch→enqueue→実 agent seam→substrate→follow-up の鎖を実 EvaluationCycleAgent で貫き、成功/失敗パスを検証する。
+            "test/discord-continuation-e2e.test.ts",
             "test/goal-agent.test.ts",
             "test/routing.test.ts",
             "test/worker-entry.test.ts",

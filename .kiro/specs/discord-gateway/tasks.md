@@ -159,7 +159,7 @@
   - _Requirements: 4.8, 4.9, 4.10, 4.11_
   - _Depends: 6.4, 6.3_
 
-- [ ] 7. Req 8: DO-backed 永続的 deferred 継続 substrate
+- [x] 7. Req 8: DO-backed 永続的 deferred 継続 substrate
 - [x] 7.1 永続的継続の型契約を追加
   - HandlerResult に DO-backed deferred 変種(`mode:"deferred-persistent"`: 継続キー + シリアライズ可能 payload)を純加算し、既存の reply/deferred/modal 変種は変更しない
   - 継続業務関数型 `Continuation`(env + payload + Followup を受ける)、DO alarm へ運ぶ封筒 `DeferredContinuationEnvelope`(interactionToken/applicationId/continuationKey/payload)、JSON シリアライズ可能な `ContinuationPayload`/`JsonValue` 型を公開する
@@ -209,7 +209,7 @@
   - _Requirements: 8.3, 8.4, 8.5, 8.6_
   - _Depends: 7.3, 7.5_
 
-- [ ] 7.7 永続的継続の統合テスト
+- [x] 7.7 永続的継続の統合テスト
   - ハンドラが `mode:"deferred-persistent"` を返すと type5 が即返り、waitUntil で primary cycle agent の seam メソッドが envelope 付きで呼ばれることを検証する
   - seam の alarm callback が `runScheduledContinuation` へ委譲し、継続成功で本応答 follow-up・継続失敗/キー未登録で失敗 follow-up が送られること、seam が業務ロジックを持たず substrate へ委譲するだけであることを検証する
   - 完了状態: enqueue→seam→substrate→follow-up の成功/失敗パスを通す統合テストが通る
