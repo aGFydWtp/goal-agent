@@ -15,7 +15,14 @@
 // 依存方向: handlers → messages / domain / goal-management(routing/domain) / llm factory(左方向のみ)。
 
 import type { DiscordEnv } from "../../discord/env";
-import type { HandlerResult, InteractionContext, InteractionHandler } from "../../discord/types";
+import type {
+  Continuation,
+  ContinuationPayload,
+  Followup,
+  HandlerResult,
+  InteractionContext,
+  InteractionHandler,
+} from "../../discord/types";
 import {
   defaultDeps,
   listGoals,
@@ -61,23 +68,40 @@ export const statusCommandHandler: InteractionHandler = {
       return { mode: "reply", ephemeral: true, content: NO_GOALS_GUIDANCE };
     }
 
-    const userId = ctx.userId;
     return {
-      mode: "deferred",
+      mode: "deferred-persistent",
       ephemeral: true,
-      run: async (followup) => {
-        const result = await determineAllStatuses(
-          authority,
-          defaultDeps(),
-          createLlmClient(env),
-          userId,
-        );
-        if (!result.ok) {
-          await followup.editOriginal(STATUS_UNAVAILABLE_GUIDANCE);
-          return;
-        }
-        await followup.editOriginal(formatStatusOverview(result.results));
+      continuation: {
+        key: STATUS_OVERVIEW_CONTINUATION_KEY,
+        payload: { userId: ctx.userId },
       },
     };
   },
+};
+
+/** `/status` 全目標判定継続のレジストリキー(discord-gateway Req 8.6 adoption)。 */
+export const STATUS_OVERVIEW_CONTINUATION_KEY = "status:overview";
+
+/**
+ * `/status` 全目標判定を DO alarm 上で実行する永続継続(Req 8.1, 8.6)。
+ *
+ * ~24s の LLM 判定を `ctx.waitUntil` budget から切り離し「考え中…」固着を防ぐ(checkin と同型)。
+ * payload から `userId` を復元し authority を再取得して判定・整形・follow-up を行う。
+ */
+export const statusOverviewContinuation: Continuation = async (
+  env: DiscordEnv,
+  payload: ContinuationPayload,
+  followup: Followup,
+): Promise<void> => {
+  const userId = payload.userId;
+  if (typeof userId !== "string") {
+    throw new Error("status 継続: payload に userId がありません");
+  }
+  const authority = await getUserCycleAuthority(env, userId);
+  const result = await determineAllStatuses(authority, defaultDeps(), createLlmClient(env), userId);
+  if (!result.ok) {
+    await followup.editOriginal(STATUS_UNAVAILABLE_GUIDANCE);
+    return;
+  }
+  await followup.editOriginal(formatStatusOverview(result.results));
 };

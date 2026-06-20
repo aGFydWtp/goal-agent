@@ -23,6 +23,8 @@ import type {
 
 import type { DiscordEnv } from "../../discord/env";
 import type {
+  Continuation,
+  ContinuationPayload,
   Followup,
   HandlerResult,
   InteractionContext,
@@ -162,17 +164,61 @@ function reasonNotice(reason: "not_found" | "no_evidence" | "generation_failed")
  * deferred を宣言し、生成と §8.7 提示を {@link runGenerate} で継続する。すべて ephemeral。
  */
 export const draftCommandHandler: InteractionHandler = {
-  handle(ctx: InteractionContext, env: DiscordEnv): HandlerResult {
+  handle(ctx: InteractionContext, _env: DiscordEnv): HandlerResult {
     const target = extractTarget(ctx);
     if (target === null) {
       return { mode: "reply", ephemeral: true, content: INVALID_INPUT_NOTICE };
     }
 
-    const userId = ctx.userId;
     return {
-      mode: "deferred",
+      mode: "deferred-persistent",
       ephemeral: true,
-      run: (followup) => runGenerate(env, userId, target, followup),
+      continuation: {
+        key: DRAFT_GENERATE_CONTINUATION_KEY,
+        payload: { userId: ctx.userId, target: targetToPayload(target) },
+      },
     };
   },
+};
+
+/** `/draft` 生成継続のレジストリキー(discord-gateway Req 8.6 adoption)。 */
+export const DRAFT_GENERATE_CONTINUATION_KEY = "draft:generate";
+
+/** {@link DraftTarget} を JSON シリアライズ可能な payload 形へ変換する。 */
+function targetToPayload(target: DraftTarget): ContinuationPayload {
+  return target.kind === "goal" ? { kind: "goal", goalId: target.goalId } : { kind: "all" };
+}
+
+/** payload の `target` フィールドを {@link DraftTarget} へ復元する(規約外は null)。 */
+function payloadToTarget(value: unknown): DraftTarget | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const obj = value as { kind?: unknown; goalId?: unknown };
+  if (obj.kind === "all") {
+    return { kind: "all" };
+  }
+  if (obj.kind === "goal" && typeof obj.goalId === "string") {
+    return { kind: "goal", goalId: obj.goalId };
+  }
+  return null;
+}
+
+/**
+ * `/draft` 生成を DO alarm 上で実行する永続継続(Req 8.1, 8.6)。
+ *
+ * ~24s の LLM 生成を `ctx.waitUntil` budget から切り離し「考え中…」固着を防ぐ(checkin と同型)。
+ * payload から `userId`/`target` を復元し {@link runGenerate} へ委譲する。
+ */
+export const draftGenerateContinuation: Continuation = async (
+  env: DiscordEnv,
+  payload: ContinuationPayload,
+  followup: Followup,
+): Promise<void> => {
+  const userId = payload.userId;
+  const target = payloadToTarget(payload.target);
+  if (typeof userId !== "string" || target === null) {
+    throw new Error("draft 生成継続: payload に userId/target がありません");
+  }
+  await runGenerate(env, userId, target, followup);
 };

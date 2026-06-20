@@ -16,6 +16,8 @@
 
 import type { DiscordEnv } from "../../discord/env";
 import type {
+  Continuation,
+  ContinuationPayload,
   Followup,
   HandlerResult,
   InteractionContext,
@@ -24,7 +26,7 @@ import type {
 import { defaultDeps } from "../../goal-management/domain/cycle-operations";
 import { getUserCycleAuthority } from "../../goal-management/routing";
 import { createLlmClient } from "../../llm/factory";
-import { parseRefineButtonId, type RefineKind } from "../custom-ids";
+import { parseRefineButtonId, REFINE_KINDS, type RefineKind } from "../custom-ids";
 import { refineDraft } from "../domain/draft-operations";
 import { formatDraft } from "../messages";
 import { getDraftEphemeralKv, hydratePendingDraftStore, persistPendingDraft } from "../routing";
@@ -92,17 +94,47 @@ async function runRefine(
  * deferred を宣言し、再生成と §8.7 再提示を {@link runRefine} で継続する。すべて ephemeral。
  */
 export const refineButtonHandler: InteractionHandler = {
-  handle(ctx: InteractionContext, env: DiscordEnv): HandlerResult {
+  handle(ctx: InteractionContext, _env: DiscordEnv): HandlerResult {
     const parsed = parseRefineButtonId(ctx.name);
     if (parsed === null) {
       return { mode: "reply", ephemeral: true, content: INVALID_BUTTON_NOTICE };
     }
 
-    const userId = ctx.userId;
     return {
-      mode: "deferred",
+      mode: "deferred-persistent",
       ephemeral: true,
-      run: (followup) => runRefine(env, userId, parsed.draftPendingId, parsed.kind, followup),
+      continuation: {
+        key: DRAFT_REFINE_CONTINUATION_KEY,
+        payload: { userId: ctx.userId, draftPendingId: parsed.draftPendingId, kind: parsed.kind },
+      },
     };
   },
+};
+
+/** ドラフト調整(refine)継続のレジストリキー(discord-gateway Req 8.6 adoption)。 */
+export const DRAFT_REFINE_CONTINUATION_KEY = "draft:refine";
+
+/** 文字列を {@link RefineKind} へ絞り込む(規約外は null)。 */
+function toRefineKind(value: unknown): RefineKind | null {
+  return REFINE_KINDS.find((k) => k === value) ?? null;
+}
+
+/**
+ * ドラフト調整(refine)を DO alarm 上で実行する永続継続(Req 8.1, 8.6)。
+ *
+ * ~24s の LLM 再生成を `ctx.waitUntil` budget から切り離し「考え中…」固着を防ぐ(checkin と同型)。
+ * payload から `userId`/`draftPendingId`/`kind` を復元し {@link runRefine} へ委譲する。
+ */
+export const draftRefineContinuation: Continuation = async (
+  env: DiscordEnv,
+  payload: ContinuationPayload,
+  followup: Followup,
+): Promise<void> => {
+  const userId = payload.userId;
+  const draftPendingId = payload.draftPendingId;
+  const kind = toRefineKind(payload.kind);
+  if (typeof userId !== "string" || typeof draftPendingId !== "string" || kind === null) {
+    throw new Error("draft 調整継続: payload に userId/draftPendingId/kind がありません");
+  }
+  await runRefine(env, userId, draftPendingId, kind, followup);
 };

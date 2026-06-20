@@ -58,10 +58,10 @@ vi.mock("../src/llm/factory", () => ({
 }));
 
 // モック設定後に SUT を import する。
-const { statusCommandHandler } = await import(
+const { statusCommandHandler, statusOverviewContinuation } = await import(
   "../src/status-and-draft/handlers/status-command"
 );
-const { goalStatusCommandHandler } = await import(
+const { goalStatusCommandHandler, goalStatusContinuation } = await import(
   "../src/status-and-draft/handlers/goal-status-command"
 );
 const { evidenceListCommandHandler } = await import(
@@ -325,12 +325,13 @@ describe("statusCommandHandler: /status", () => {
 
       const result = await statusCommandHandler.handle(statusCtx("user-1"), env);
 
-      expect(result.mode).toBe("deferred");
-      if (result.mode !== "deferred") throw new Error("expected deferred");
+      expect(result.mode).toBe("deferred-persistent");
+      if (result.mode !== "deferred-persistent")
+        throw new Error("expected deferred-persistent");
       expect(result.ephemeral).toBe(true);
 
       const { followup, editCalls } = makeFollowup();
-      await result.run(followup);
+      await statusOverviewContinuation(env, result.continuation.payload, followup);
 
       expect(editCalls).toHaveLength(1);
       const content = editCalls[0]!.content;
@@ -373,11 +374,12 @@ describe("goalStatusCommandHandler: /goal status", () => {
         env,
       );
 
-      expect(result.mode).toBe("deferred");
-      if (result.mode !== "deferred") throw new Error("expected deferred");
+      expect(result.mode).toBe("deferred-persistent");
+      if (result.mode !== "deferred-persistent")
+        throw new Error("expected deferred-persistent");
 
       const { followup, editCalls } = makeFollowup();
-      await result.run(followup);
+      await goalStatusContinuation(env, result.continuation.payload, followup);
 
       expect(editCalls).toHaveLength(1);
       expect(editCalls[0]!.content).toContain("見つかりません");
@@ -410,12 +412,13 @@ describe("goalStatusCommandHandler: /goal status", () => {
         env,
       );
 
-      expect(result.mode).toBe("deferred");
-      if (result.mode !== "deferred") throw new Error("expected deferred");
+      expect(result.mode).toBe("deferred-persistent");
+      if (result.mode !== "deferred-persistent")
+        throw new Error("expected deferred-persistent");
       expect(result.ephemeral).toBe(true);
 
       const { followup, editCalls } = makeFollowup();
-      await result.run(followup);
+      await goalStatusContinuation(env, result.continuation.payload, followup);
 
       expect(editCalls).toHaveLength(1);
       const content = editCalls[0]!.content;

@@ -131,17 +131,21 @@ vi.mock("../src/llm/factory", () => ({
 }));
 
 // モック設定後に SUT を import する。
-const { statusCommandHandler } = await import(
+const { statusCommandHandler, statusOverviewContinuation } = await import(
   "../src/status-and-draft/handlers/status-command"
 );
-const { goalStatusCommandHandler } = await import(
+const { goalStatusCommandHandler, goalStatusContinuation } = await import(
   "../src/status-and-draft/handlers/goal-status-command"
 );
 const { evidenceListCommandHandler } = await import(
   "../src/status-and-draft/handlers/evidence-list-command"
 );
-const { draftCommandHandler } = await import("../src/status-and-draft/handlers/draft-command");
-const { refineButtonHandler } = await import("../src/status-and-draft/handlers/refine-button");
+const { draftCommandHandler, draftGenerateContinuation } = await import(
+  "../src/status-and-draft/handlers/draft-command"
+);
+const { refineButtonHandler, draftRefineContinuation } = await import(
+  "../src/status-and-draft/handlers/refine-button"
+);
 const { saveDraftButtonHandler } = await import(
   "../src/status-and-draft/handlers/save-draft-button"
 );
@@ -426,12 +430,13 @@ describe("クリティカルパス E2E(単一権威 + 単一 KV)", () => {
 
     // ── 1) /status: deferred → §8.4 概況(目標名 + 状態 + 今週やるとよいこと)──
     const statusResult = await statusCommandHandler.handle(statusCtx(), env);
-    expect(statusResult.mode).toBe("deferred");
-    if (statusResult.mode !== "deferred") throw new Error("expected deferred");
+    expect(statusResult.mode).toBe("deferred-persistent");
+    if (statusResult.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     expect(statusResult.ephemeral).toBe(true);
     {
       const { followup, edits } = makeFollowup();
-      await statusResult.run(followup);
+      await statusOverviewContinuation(env, statusResult.continuation.payload, followup);
       expect(edits).toHaveLength(1);
       const content = edits[0]!.content;
       expect(content).toContain("評価目標ステータス");
@@ -442,11 +447,12 @@ describe("クリティカルパス E2E(単一権威 + 単一 KV)", () => {
 
     // ── 2) /goal status: deferred → §8.5 詳細(状態/見立て/証跡/不足/次アクション)──
     const goalResult = await goalStatusCommandHandler.handle(goalStatusCtx(GOAL_A), env);
-    expect(goalResult.mode).toBe("deferred");
-    if (goalResult.mode !== "deferred") throw new Error("expected deferred");
+    expect(goalResult.mode).toBe("deferred-persistent");
+    if (goalResult.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     {
       const { followup, edits } = makeFollowup();
-      await goalResult.run(followup);
+      await goalStatusContinuation(env, goalResult.continuation.payload, followup);
       expect(edits).toHaveLength(1);
       const content = edits[0]!.content;
       expect(content).toContain("AI 活用で開発効率を上げる");
@@ -469,11 +475,12 @@ describe("クリティカルパス E2E(単一権威 + 単一 KV)", () => {
 
     // ── 4) /draft goal: deferred → §8.7 ドラフト + 5 ボタン、pending を共有 KV へ ──
     const draftResult = await draftCommandHandler.handle(draftGoalCtx(GOAL_A), env);
-    expect(draftResult.mode).toBe("deferred");
-    if (draftResult.mode !== "deferred") throw new Error("expected deferred");
+    expect(draftResult.mode).toBe("deferred-persistent");
+    if (draftResult.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     {
       const { followup, edits } = makeFollowup();
-      await draftResult.run(followup);
+      await draftGenerateContinuation(env, draftResult.continuation.payload, followup);
       expect(edits).toHaveLength(1);
       expect(edits[0]!.content).toContain("自己評価ドラフト");
       expect(edits[0]!.content).toContain(generatedDraft.facts);
@@ -487,11 +494,12 @@ describe("クリティカルパス E2E(単一権威 + 単一 KV)", () => {
       buttonCtx(buildRefineButtonId("manager", draftPendingId)),
       env,
     );
-    expect(refineResult.mode).toBe("deferred");
-    if (refineResult.mode !== "deferred") throw new Error("expected deferred");
+    expect(refineResult.mode).toBe("deferred-persistent");
+    if (refineResult.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     {
       const { followup, edits } = makeFollowup();
-      await refineResult.run(followup);
+      await draftRefineContinuation(env, refineResult.continuation.payload, followup);
       expect(edits[0]!.content).toContain("自己評価ドラフト");
       expect(edits[0]!.content).toContain(refinedDraft.facts);
       expect(buttonCount(edits[0]!.components)).toBe(5);

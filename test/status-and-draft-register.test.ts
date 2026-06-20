@@ -38,6 +38,16 @@ vi.mock("../src/status-and-draft/routing", () => ({
   hydratePendingDraftStore: vi.fn(),
 }));
 
+// 継続登録(registerContinuation)経由で読み込まれる src/discord/continuation が
+// `../agents/routing`(DO ルーティング = `cloudflare:` スキーム)を値 import するため、
+// node プロジェクトでは解決できない。登録配線のみを検証する本テストでは routing を
+// モックして import チェーンを断つ(checkin register テストと同じ方針)。
+vi.mock("../src/agents/routing", () => ({
+  PRIMARY_CYCLE_KEY: "primary",
+  getCycleAgent: vi.fn(),
+  getGoalAgent: vi.fn(),
+}));
+
 import {
   commandDefinitions,
   resetCommandDefinitions,

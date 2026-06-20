@@ -84,8 +84,12 @@ vi.mock("../src/llm/factory", () => ({
   createLlmClient: () => new FakeLlmClient(),
 }));
 
-const { draftCommandHandler } = await import("../src/status-and-draft/handlers/draft-command");
-const { refineButtonHandler } = await import("../src/status-and-draft/handlers/refine-button");
+const { draftCommandHandler, draftGenerateContinuation } = await import(
+  "../src/status-and-draft/handlers/draft-command"
+);
+const { refineButtonHandler, draftRefineContinuation } = await import(
+  "../src/status-and-draft/handlers/refine-button"
+);
 const { saveDraftButtonHandler } = await import(
   "../src/status-and-draft/handlers/save-draft-button"
 );
@@ -253,12 +257,13 @@ describe("draftCommandHandler: /draft goal", () => {
     nextDraft = { ok: true, value: generated };
 
     const result = await draftCommandHandler.handle(draftGoalCtx("goal-1"), env);
-    expect(result.mode).toBe("deferred");
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    expect(result.mode).toBe("deferred-persistent");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     expect(result.ephemeral).toBe(true);
 
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftGenerateContinuation(env, result.continuation.payload, followup);
 
     expect(edits).toHaveLength(1);
     expect(edits[0].content).toContain("自己評価ドラフト");
@@ -284,9 +289,10 @@ describe("draftCommandHandler: /draft goal", () => {
     nextDraft = { ok: true, value: generated };
 
     const result = await draftCommandHandler.handle(draftGoalCtx("goal-1"), env);
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftGenerateContinuation(env, result.continuation.payload, followup);
 
     expect(edits[0].content).toContain("証跡");
     expect(edits[0].components).toBeUndefined();
@@ -299,9 +305,10 @@ describe("draftCommandHandler: /draft goal", () => {
     nextDraft = { ok: false, error: { kind: "provider_error", message: "down" } };
 
     const result = await draftCommandHandler.handle(draftGoalCtx("goal-1"), env);
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftGenerateContinuation(env, result.continuation.payload, followup);
 
     expect(edits[0].content.length).toBeGreaterThan(0);
     expect(edits[0].components).toBeUndefined();
@@ -314,9 +321,10 @@ describe("draftCommandHandler: /draft goal", () => {
     nextDraft = { ok: true, value: generated };
 
     const result = await draftCommandHandler.handle(draftGoalCtx("goal-missing"), env);
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftGenerateContinuation(env, result.continuation.payload, followup);
 
     expect(edits[0].content).toContain("見つかりません");
     expect(edits[0].content).not.toContain("自己評価ドラフト");
@@ -329,9 +337,10 @@ describe("draftCommandHandler: /draft all", () => {
     nextDraft = { ok: true, value: generated };
 
     const result = await draftCommandHandler.handle(draftAllCtx(), env);
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftGenerateContinuation(env, result.continuation.payload, followup);
 
     expect(edits[0].content).toContain("自己評価ドラフト");
     expect(buttonCount(edits[0].components)).toBe(5);
@@ -344,9 +353,10 @@ describe("refineButtonHandler", () => {
     seedCycleGoalEvidence(userId, true);
     nextDraft = { ok: true, value: generated };
     const result = await draftCommandHandler.handle(draftGoalCtx("goal-1", userId), env);
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup } = makeFollowup();
-    await result.run(followup);
+    await draftGenerateContinuation(env, result.continuation.payload, followup);
     const { ephemeral } = doFor(userId);
     const key = [...ephemeral.keys()].find((k) => k.startsWith(pendingDraftKey("")));
     if (key === undefined) throw new Error("pending not persisted");
@@ -361,12 +371,13 @@ describe("refineButtonHandler", () => {
       buttonCtx(buildRefineButtonId("manager", id)),
       env,
     );
-    expect(result.mode).toBe("deferred");
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    expect(result.mode).toBe("deferred-persistent");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     expect(result.ephemeral).toBe(true);
 
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftRefineContinuation(env, result.continuation.payload, followup);
 
     expect(edits[0].content).toContain("自己評価ドラフト");
     expect(edits[0].content).toContain(refined.facts);
@@ -383,9 +394,10 @@ describe("refineButtonHandler", () => {
       buttonCtx(buildRefineButtonId("shorten", "missing")),
       env,
     );
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftRefineContinuation(env, result.continuation.payload, followup);
 
     expect(edits[0].content.length).toBeGreaterThan(0);
     expect(edits[0].content).not.toContain("自己評価ドラフト");
@@ -399,9 +411,10 @@ describe("refineButtonHandler", () => {
       buttonCtx(buildRefineButtonId("manager", id), "user-2"),
       env,
     );
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftRefineContinuation(env, result.continuation.payload, followup);
 
     expect(edits[0].content).not.toContain("自己評価ドラフト");
     // user-1 の pending は更新されず残存。
@@ -418,9 +431,10 @@ describe("refineButtonHandler", () => {
       buttonCtx(buildRefineButtonId("clarify", id)),
       env,
     );
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await draftRefineContinuation(env, result.continuation.payload, followup);
 
     expect(edits[0].content.length).toBeGreaterThan(0);
     expect(edits[0].content).not.toContain(refined.facts);
@@ -443,9 +457,10 @@ describe("saveDraftButtonHandler", () => {
     seedCycleGoalEvidence(userId, true);
     nextDraft = { ok: true, value: generated };
     const result = await draftCommandHandler.handle(draftGoalCtx("goal-1", userId), env);
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
     const { followup } = makeFollowup();
-    await result.run(followup);
+    await draftGenerateContinuation(env, result.continuation.payload, followup);
     const { ephemeral } = doFor(userId);
     const key = [...ephemeral.keys()].find((k) => k.startsWith(pendingDraftKey("")));
     if (key === undefined) throw new Error("pending not persisted");
@@ -523,8 +538,9 @@ describe("生成→調整→保存の全系列(KV 共有)", () => {
 
     // 生成
     const gen = await draftCommandHandler.handle(draftGoalCtx("goal-1"), env);
-    if (gen.mode !== "deferred") throw new Error("expected deferred");
-    await gen.run(makeFollowup().followup);
+    if (gen.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
+    await draftGenerateContinuation(env, gen.continuation.payload, makeFollowup().followup);
     const { ephemeral } = doFor("user-1");
     const key = [...ephemeral.keys()].find((k) => k.startsWith(pendingDraftKey("")))!;
     const id = JSON.parse(ephemeral.get(key)!).draftPendingId as string;
@@ -535,8 +551,9 @@ describe("生成→調整→保存の全系列(KV 共有)", () => {
       buttonCtx(buildRefineButtonId("shorten", id)),
       env,
     );
-    if (ref.mode !== "deferred") throw new Error("expected deferred");
-    await ref.run(makeFollowup().followup);
+    if (ref.mode !== "deferred-persistent")
+      throw new Error("expected deferred-persistent");
+    await draftRefineContinuation(env, ref.continuation.payload, makeFollowup().followup);
 
     // 保存
     const sav = await saveDraftButtonHandler.handle(buttonCtx(buildSaveDraftButtonId(id)), env);

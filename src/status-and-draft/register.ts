@@ -4,6 +4,7 @@ import type {
 } from "discord-api-types/v10";
 
 import { commandDefinitions, registerCommandDefinition } from "../discord/commands/definitions";
+import { registerContinuation } from "../discord/continuation";
 import { registerHandler, registerPrefixHandler } from "../discord/registry";
 import { EVIDENCE_COMMAND_NAME, GOAL_COMMAND_NAME } from "../goal-management/commands";
 import {
@@ -23,12 +24,28 @@ import {
   SHORTEN_BTN,
   STRENGTHEN_BTN,
 } from "./custom-ids";
-import { draftCommandHandler } from "./handlers/draft-command";
+import {
+  DRAFT_GENERATE_CONTINUATION_KEY,
+  draftCommandHandler,
+  draftGenerateContinuation,
+} from "./handlers/draft-command";
 import { evidenceListCommandHandler } from "./handlers/evidence-list-command";
-import { goalStatusCommandHandler } from "./handlers/goal-status-command";
-import { refineButtonHandler } from "./handlers/refine-button";
+import {
+  GOAL_STATUS_CONTINUATION_KEY,
+  goalStatusCommandHandler,
+  goalStatusContinuation,
+} from "./handlers/goal-status-command";
+import {
+  DRAFT_REFINE_CONTINUATION_KEY,
+  draftRefineContinuation,
+  refineButtonHandler,
+} from "./handlers/refine-button";
 import { saveDraftButtonHandler } from "./handlers/save-draft-button";
-import { statusCommandHandler } from "./handlers/status-command";
+import {
+  STATUS_OVERVIEW_CONTINUATION_KEY,
+  statusCommandHandler,
+  statusOverviewContinuation,
+} from "./handlers/status-command";
 
 /**
  * status-and-draft のハンドラ登録・コマンド定義集約・サブコマンドマージ (task 6.3 /
@@ -129,6 +146,14 @@ export function registerStatusAndDraft(): void {
     evidenceListCommandHandler,
   );
   registerHandler("command", DRAFT_COMMAND_NAME, draftCommandHandler);
+
+  // 4 ハンドラは `mode:"deferred-persistent"` を返すため、各継続を起動時に登録する(checkin と同型)。
+  // top-level 副作用(index.ts が本関数を呼ぶ)で登録するため Worker fetch / DO 双方の isolate に
+  // 反映され、DO alarm 上の lookupContinuation が解決できる(discord-gateway Req 8.6)。
+  registerContinuation(STATUS_OVERVIEW_CONTINUATION_KEY, statusOverviewContinuation);
+  registerContinuation(GOAL_STATUS_CONTINUATION_KEY, goalStatusContinuation);
+  registerContinuation(DRAFT_GENERATE_CONTINUATION_KEY, draftGenerateContinuation);
+  registerContinuation(DRAFT_REFINE_CONTINUATION_KEY, draftRefineContinuation);
 
   // 4 種の調整ボタンは動的 custom_id 接頭辞で登録(kind は接頭辞に符号化済み →
   // refineButtonHandler が内部で parse する)。保存ボタンも接頭辞で登録する。

@@ -22,7 +22,14 @@ import type {
 } from "discord-api-types/v10";
 
 import type { DiscordEnv } from "../../discord/env";
-import type { HandlerResult, InteractionContext, InteractionHandler } from "../../discord/types";
+import type {
+  Continuation,
+  ContinuationPayload,
+  Followup,
+  HandlerResult,
+  InteractionContext,
+  InteractionHandler,
+} from "../../discord/types";
 import { defaultDeps, resolveActiveCycle } from "../../goal-management/domain/cycle-operations";
 import { getUserCycleAuthority } from "../../goal-management/routing";
 import { createLlmClient } from "../../llm/factory";
@@ -100,41 +107,63 @@ function stringOptionValue(
  *    (Req 3.1, 3.5)。
  */
 export const goalStatusCommandHandler: InteractionHandler = {
-  handle(ctx: InteractionContext, env: DiscordEnv): HandlerResult {
+  handle(ctx: InteractionContext, _env: DiscordEnv): HandlerResult {
     const goalId = extractGoalId(ctx);
     if (goalId === null) {
       return { mode: "reply", ephemeral: true, content: MISSING_GOAL_GUIDANCE };
     }
 
-    const userId = ctx.userId;
     return {
-      mode: "deferred",
+      mode: "deferred-persistent",
       ephemeral: true,
-      run: async (followup) => {
-        const authority = await getUserCycleAuthority(env, userId);
-        const cycle = await resolveActiveCycle(authority, userId);
-        if (cycle === null) {
-          await followup.editOriginal(NOT_FOUND_GUIDANCE);
-          return;
-        }
-
-        const result = await determineGoalStatus(
-          authority,
-          defaultDeps(),
-          createLlmClient(env),
-          userId,
-          cycle.id,
-          goalId,
-        );
-        if (!result.ok) {
-          await followup.editOriginal(NOT_FOUND_GUIDANCE);
-          return;
-        }
-
-        await followup.editOriginal(
-          formatGoalStatus(result.goal, result.verdict, result.evidence, result.shortfalls),
-        );
+      continuation: {
+        key: GOAL_STATUS_CONTINUATION_KEY,
+        payload: { userId: ctx.userId, goalId },
       },
     };
   },
+};
+
+/** `/goal status` 単一目標判定継続のレジストリキー(discord-gateway Req 8.6 adoption)。 */
+export const GOAL_STATUS_CONTINUATION_KEY = "status:goal";
+
+/**
+ * `/goal status` 単一目標判定を DO alarm 上で実行する永続継続(Req 8.1, 8.6)。
+ *
+ * payload から `userId`/`goalId` を復元し、サイクル解決 → 判定 → §8.5 整形 → follow-up を行う。
+ * 非所有/不存在/サイクル不在は「見つからない」へ正規化する(checkin と同型)。
+ */
+export const goalStatusContinuation: Continuation = async (
+  env: DiscordEnv,
+  payload: ContinuationPayload,
+  followup: Followup,
+): Promise<void> => {
+  const userId = payload.userId;
+  const goalId = payload.goalId;
+  if (typeof userId !== "string" || typeof goalId !== "string") {
+    throw new Error("goal status 継続: payload に userId/goalId がありません");
+  }
+  const authority = await getUserCycleAuthority(env, userId);
+  const cycle = await resolveActiveCycle(authority, userId);
+  if (cycle === null) {
+    await followup.editOriginal(NOT_FOUND_GUIDANCE);
+    return;
+  }
+
+  const result = await determineGoalStatus(
+    authority,
+    defaultDeps(),
+    createLlmClient(env),
+    userId,
+    cycle.id,
+    goalId,
+  );
+  if (!result.ok) {
+    await followup.editOriginal(NOT_FOUND_GUIDANCE);
+    return;
+  }
+
+  await followup.editOriginal(
+    formatGoalStatus(result.goal, result.verdict, result.evidence, result.shortfalls),
+  );
 };
