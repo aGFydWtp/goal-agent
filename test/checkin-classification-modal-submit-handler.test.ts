@@ -85,9 +85,11 @@ vi.mock("../src/llm/factory", () => ({
   createLlmClient: () => new FakeLlmClient(),
 }));
 
-const { checkinModalSubmitHandler } = await import(
-  "../src/checkin-classification/handlers/checkin-modal-submit"
-);
+const {
+  checkinModalSubmitHandler,
+  checkinClassificationContinuation,
+  CHECKIN_CLASSIFICATION_CONTINUATION_KEY,
+} = await import("../src/checkin-classification/handlers/checkin-modal-submit");
 const {
   CHECKIN_INPUT_FIELD_ID,
   parseCheckinSaveButtonId,
@@ -194,17 +196,20 @@ describe("checkinModalSubmitHandler: 空入力ガード", () => {
 });
 
 describe("checkinModalSubmitHandler: 分類成功", () => {
-  it("入力ありで deferred を返し、follow-up に確認メッセージ + 3 ボタンを送る (2.7, 3.1, 3.2)", async () => {
+  it("入力ありで deferred-persistent を返し、継続が確認メッセージ + 3 ボタンを送る (2.7, 3.1, 3.2, 8.1)", async () => {
     seedCycleAndGoal("user-1");
     nextClassification = { ok: true, value: validClassification };
 
     const result = await checkinModalSubmitHandler.handle(modalCtx("今週やったこと"), env);
-    expect(result.mode).toBe("deferred");
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    expect(result.mode).toBe("deferred-persistent");
+    if (result.mode !== "deferred-persistent") throw new Error("expected deferred-persistent");
     expect(result.ephemeral).toBe(true);
+    // 継続キーと payload(再生成不能な rawText を含む)が宣言される(Req 8.1, 8.6)。
+    expect(result.continuation.key).toBe(CHECKIN_CLASSIFICATION_CONTINUATION_KEY);
+    expect(result.continuation.payload).toEqual({ userId: "user-1", rawText: "今週やったこと" });
 
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await checkinClassificationContinuation(env, result.continuation.payload, followup);
 
     expect(edits).toHaveLength(1);
     const edit = edits[0];
@@ -240,10 +245,10 @@ describe("checkinModalSubmitHandler: 分類失敗", () => {
     nextClassification = { ok: false, error: { kind: "invalid_output", message: "bad json" } };
 
     const result = await checkinModalSubmitHandler.handle(modalCtx("今週やったこと"), env);
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent") throw new Error("expected deferred-persistent");
 
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await checkinClassificationContinuation(env, result.continuation.payload, followup);
 
     expect(edits).toHaveLength(1);
     expect(edits[0].content).toContain("分類に失敗");
@@ -257,10 +262,10 @@ describe("checkinModalSubmitHandler: 分類失敗", () => {
     // サイクル未シードのまま実行。
     nextClassification = { ok: true, value: validClassification };
     const result = await checkinModalSubmitHandler.handle(modalCtx("今週やったこと"), env);
-    if (result.mode !== "deferred") throw new Error("expected deferred");
+    if (result.mode !== "deferred-persistent") throw new Error("expected deferred-persistent");
 
     const { followup, edits } = makeFollowup();
-    await result.run(followup);
+    await checkinClassificationContinuation(env, result.continuation.payload, followup);
 
     expect(edits).toHaveLength(1);
     expect(edits[0].content).toContain("サイクル");

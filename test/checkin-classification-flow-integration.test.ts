@@ -85,6 +85,7 @@ vi.mock("../src/llm/factory", () => ({
 
 const { registerCheckinClassification } = await import("../src/checkin-classification/register");
 const { lookupHandler, resetDefaultRegistry } = await import("../src/discord/registry");
+const { lookupContinuation } = await import("../src/discord/continuation");
 const { resetCommandDefinitions } = await import("../src/discord/commands/definitions");
 const { CHECKIN_COMMAND_NAME } = await import("../src/checkin-classification/commands");
 const {
@@ -213,9 +214,12 @@ function makeFollowup(): {
 /** modal submit を実行し、確認 follow-up から pendingId を取り出す。 */
 async function classifyAndGetPendingId(userId: string, rawText: string): Promise<string> {
   const result = await dispatch(modalCtx(userId, rawText));
-  if (result.mode !== "deferred") throw new Error("expected deferred");
+  if (result.mode !== "deferred-persistent") throw new Error("expected deferred-persistent");
+  // 継続キーで登録済み継続を解決し(登録疎通も同時に検証)、substrate と同じく payload + followup で実行する。
+  const continuation = lookupContinuation(result.continuation.key);
+  if (continuation === null) throw new Error("continuation not registered");
   const { followup, edits } = makeFollowup();
-  await result.run(followup);
+  await continuation(env, result.continuation.payload, followup);
   const rows = edits[0].components as { components: { custom_id: string }[] }[];
   const saveId = rows[0].components
     .map((c) => c.custom_id)
@@ -249,12 +253,14 @@ describe("task 5.1: 分類フロー結合", () => {
     const input = await dispatch(inputButtonCtx("user-1"));
     expect(input.mode).toBe("modal");
 
-    // modal submit: deferred → 確認メッセージ + 3 ボタン。
+    // modal submit: deferred-persistent → 継続が確認メッセージ + 3 ボタンを送る。
     const modal = await dispatch(modalCtx("user-1", "結合テストを実装した。誤字も直した。"));
-    expect(modal.mode).toBe("deferred");
-    if (modal.mode !== "deferred") throw new Error("deferred");
+    expect(modal.mode).toBe("deferred-persistent");
+    if (modal.mode !== "deferred-persistent") throw new Error("deferred-persistent");
+    const continuation = lookupContinuation(modal.continuation.key);
+    if (continuation === null) throw new Error("continuation not registered");
     const { followup, edits } = makeFollowup();
-    await modal.run(followup);
+    await continuation(env, modal.continuation.payload, followup);
 
     expect(edits).toHaveLength(1);
     expect(edits[0].content).toContain("保存しますか");

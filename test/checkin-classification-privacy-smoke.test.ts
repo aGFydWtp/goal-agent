@@ -88,6 +88,7 @@ vi.mock("../src/llm/factory", () => ({
 
 const { registerCheckinClassification } = await import("../src/checkin-classification/register");
 const { lookupHandler, resetDefaultRegistry } = await import("../src/discord/registry");
+const { lookupContinuation } = await import("../src/discord/continuation");
 const { resetCommandDefinitions } = await import("../src/discord/commands/definitions");
 const { CHECKIN_COMMAND_NAME } = await import("../src/checkin-classification/commands");
 const { CHECKIN_INPUT_FIELD_ID, CHECKIN_MODAL_ID, parseCheckinSaveButtonId, buildCheckinSaveButtonId } =
@@ -203,9 +204,11 @@ function assertPersonalOnly(result: HandlerResult): void {
 
 async function classifyPendingId(userId: string, rawText: string): Promise<string> {
   const modal = await dispatch(modalCtx(userId, rawText));
-  if (modal.mode !== "deferred") throw new Error("deferred");
+  if (modal.mode !== "deferred-persistent") throw new Error("deferred-persistent");
+  const continuation = lookupContinuation(modal.continuation.key);
+  if (continuation === null) throw new Error("continuation not registered");
   const fu = makeFollowup();
-  await modal.run(fu.followup);
+  await continuation(env, modal.continuation.payload, fu.followup);
   const rows = fu.edits[0].components as { components: { custom_id: string }[] }[];
   const saveId = rows[0].components
     .map((c) => c.custom_id)

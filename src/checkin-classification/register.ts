@@ -25,6 +25,7 @@
 // 依存方向: `commands.ts` / `custom-ids.ts` → `register.ts` → `handlers/*`(左方向のみ)。
 
 import { registerCommandDefinition } from "../discord/commands/definitions";
+import { registerContinuation } from "../discord/continuation";
 import { registerHandler, registerPrefixHandler } from "../discord/registry";
 import { CHECKIN_COMMAND_NAME, checkinCommandDefinitions } from "./commands";
 import {
@@ -35,7 +36,11 @@ import {
   CHECKIN_SAVE_BUTTON_ID,
 } from "./custom-ids";
 import { checkinCommandHandler } from "./handlers/checkin-command";
-import { checkinModalSubmitHandler } from "./handlers/checkin-modal-submit";
+import {
+  CHECKIN_CLASSIFICATION_CONTINUATION_KEY,
+  checkinClassificationContinuation,
+  checkinModalSubmitHandler,
+} from "./handlers/checkin-modal-submit";
 import { discardButtonHandler } from "./handlers/discard-button";
 import { editButtonHandler } from "./handlers/edit-button";
 import { inputButtonHandler } from "./handlers/input-button";
@@ -56,6 +61,11 @@ export function registerCheckinClassification(): void {
   registerHandler("command", CHECKIN_COMMAND_NAME, checkinCommandHandler);
   registerHandler("component", CHECKIN_INPUT_BUTTON_ID, inputButtonHandler);
   registerHandler("modal", CHECKIN_MODAL_ID, checkinModalSubmitHandler);
+
+  // modal submit は `mode:"deferred-persistent"` を返すため、分類継続を起動時に登録する。
+  // top-level 副作用(index.ts が本関数を呼ぶ)で登録するため Worker fetch / DO 双方の isolate に
+  // 反映され、DO alarm 上の lookupContinuation が解決できる(discord-gateway Req 8.6 / tasks.md L227)。
+  registerContinuation(CHECKIN_CLASSIFICATION_CONTINUATION_KEY, checkinClassificationContinuation);
 
   registerPrefixHandler(
     "component",

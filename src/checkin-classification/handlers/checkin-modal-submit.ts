@@ -24,6 +24,8 @@ import type {
 
 import type { DiscordEnv } from "../../discord/env";
 import type {
+  Continuation,
+  ContinuationPayload,
   Followup,
   HandlerResult,
   InteractionContext,
@@ -81,6 +83,16 @@ const CLASSIFICATION_FAILED_NOTICE =
 /** 対象サイクルが解決できない場合の案内(Req 1.2 相当の防御)。 */
 const NO_CYCLE_NOTICE =
   "アクティブな評価サイクルが見つかりませんでした。先に `/cycle create` でサイクルを作成してください。";
+
+/**
+ * checkin 分類継続のレジストリキー (discord-gateway Req 8.6 / tasks.md L225 adoption)。
+ *
+ * `index.ts` 起動時に {@link registerCheckinClassification} 経由で
+ * {@link checkinClassificationContinuation} をこのキーで登録し、modal submit ハンドラが
+ * `mode:"deferred-persistent"` の `continuation.key` として宣言する。区切り `:` 込みの一意名で、
+ * 他スペックの継続キー(`/status`・`/draft` 等)と衝突しない。
+ */
+export const CHECKIN_CLASSIFICATION_CONTINUATION_KEY = "checkin:classify";
 
 /**
  * modal submit payload の action row 群を走査し、各 text input の custom_id → value を引く。
@@ -195,23 +207,53 @@ async function runClassification(
 }
 
 /**
+ * checkin 分類を DO alarm 上で実行する永続継続 (discord-gateway Req 8.6, 8.8 / tasks.md L225)。
+ *
+ * `mode:"deferred-persistent"` 経路で substrate runner(`runScheduledContinuation`)から
+ * `(env, payload, followup)` で呼ばれ、payload から `userId`/`rawText` を復元して
+ * {@link runClassification} へ委譲する。`ctx.waitUntil` budget を超えうる ~24s の LLM 推論を
+ * 初期応答ライフタイムから切り離すことで「考え中…」固着を解消する(plain `deferred` からの移行)。
+ *
+ * payload が規約外(`userId`/`rawText` 欠落)の場合は例外を投げる。substrate がこれを捕捉し
+ * 失敗 follow-up を送るため、「考え中…」は固着しない(Req 8.5)。
+ */
+export const checkinClassificationContinuation: Continuation = async (
+  env: DiscordEnv,
+  payload: ContinuationPayload,
+  followup: Followup,
+): Promise<void> => {
+  const userId = payload.userId;
+  const rawText = payload.rawText;
+  if (typeof userId !== "string" || typeof rawText !== "string") {
+    throw new Error("checkin 継続: payload に userId/rawText がありません");
+  }
+  await runClassification(env, userId, rawText, followup);
+};
+
+/**
  * checkin modal submit ハンドラ(Req 1.3, 1.4, 2.6, 2.7, 3.1, 3.2, 3.6)。
  *
- * 空入力は deferred せず即時 ephemeral 通知(分類フローを開始しない)。入力ありは deferred を
- * 宣言し、分類と確認提示を {@link runClassification} で継続する。
+ * 空入力は deferred せず即時 ephemeral 通知(分類フローを開始しない)。入力ありは
+ * `deferred-persistent` を宣言し、分類本体を DO alarm 上の {@link checkinClassificationContinuation}
+ * へ委譲する。~24s の LLM 推論を `ctx.waitUntil` budget から切り離し「考え中…」固着を防ぐ
+ * (tasks.md L225 adoption / Req 8.1)。
  */
 export const checkinModalSubmitHandler: InteractionHandler = {
-  handle(ctx: InteractionContext, env: DiscordEnv): HandlerResult {
+  handle(ctx: InteractionContext, _env: DiscordEnv): HandlerResult {
     const rawText = buildFieldLookup(ctx).get(CHECKIN_INPUT_FIELD_ID) ?? "";
     if (rawText.trim().length === 0) {
       return { mode: "reply", ephemeral: true, content: EMPTY_INPUT_NOTICE };
     }
 
-    const userId = ctx.userId;
+    // 再生成不能な確定前データ(rawText)を payload に載せて継続へ運ぶ。継続は env/payload から
+    // authority を再取得して走るため、ハンドラのクロージャ状態には依存しない(Req 8.6)。
     return {
-      mode: "deferred",
+      mode: "deferred-persistent",
       ephemeral: true,
-      run: (followup) => runClassification(env, userId, rawText, followup),
+      continuation: {
+        key: CHECKIN_CLASSIFICATION_CONTINUATION_KEY,
+        payload: { userId: ctx.userId, rawText },
+      },
     };
   },
 };
